@@ -10,8 +10,8 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	"hack2026/backend/internal/ml"
-	"hack2026/backend/internal/models"
+	"itsm-dashboard/backend/internal/ml"
+	"itsm-dashboard/backend/internal/models"
 )
 
 type DB struct {

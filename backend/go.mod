@@ -1,4 +1,4 @@
-module hack2026/backend
+module itsm-dashboard/backend
 
 go 1.25.1
 

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"hack2026/backend/internal/models"
+	"itsm-dashboard/backend/internal/models"
 )
 
 type RoutingModelData struct {
@@ -54,7 +54,7 @@ func (e *Engine) LoadModels(baseDir string) error {
 		baseDir,
 		filepath.Join("..", baseDir),
 		filepath.Join("backend", baseDir),
-		filepath.Join("c:", "Users", "lacker", "Projects", "Hack2026", "backend", "models_ai"),
+		filepath.Join("..", "..", "backend", "models_ai"),
 	}
 
 	var routingPath, riskPath string
@@ -280,7 +280,7 @@ func (e *Engine) evaluateRouting(inc *models.Incident) {
 
 		// Calibrated realistic confidence percentage based on text evidence
 		conf := 74.0 + (candidates[0].prob * 1.2)
-		kwList := []string{"san", "vmware", "kion", "tictok", "акваланг", "allure", "active directory", "vpn", "каталог"}
+		kwList := []string{"san", "vmware", "streaming", "tictok", "акваланг", "allure", "active directory", "vpn", "каталог"}
 		for _, kw := range kwList {
 			if strings.Contains(fullText, kw) && strings.Contains(strings.ToLower(candidates[0].group), kw) {
 				conf += 14.0
@@ -330,7 +330,7 @@ func (e *Engine) evaluateSLABreach(inc *models.Incident, teamWorkload map[string
 	switch {
 	case strings.Contains(teamLower, "san"), strings.Contains(teamLower, "vmware"), strings.Contains(teamLower, "dc-net"):
 		baseMTTR = 300.0 // 5 hours for hardware/infra
-	case strings.Contains(teamLower, "kion"), strings.Contains(teamLower, "billing"):
+	case strings.Contains(teamLower, "streaming"), strings.Contains(teamLower, "media"), strings.Contains(teamLower, "billing"):
 		baseMTTR = 120.0 // 2 hours for client streaming/billing
 	case strings.Contains(teamLower, "active directory"), strings.Contains(teamLower, "vpn"):
 		baseMTTR = 90.0 // 1.5 hours for IAM/network

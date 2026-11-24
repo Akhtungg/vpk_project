@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"hack2026/backend/internal/models"
+	"itsm-dashboard/backend/internal/models"
 )
 
 type SSEHub struct {

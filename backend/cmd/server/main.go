@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"hack2026/backend/internal/api"
-	"hack2026/backend/internal/database"
+	"itsm-dashboard/backend/internal/api"
+	"itsm-dashboard/backend/internal/database"
 )
 
 func main() {
@@ -24,9 +24,9 @@ func main() {
 		dbURL = "postgres://postgres:postgres@localhost:5432/itsm_dashboard?sslmode=disable"
 	}
 
-	log.Println("==================================================")
-	log.Println("  MTC True Tech - ITSM Incident Dashboard Backend  ")
-	log.Println("==================================================")
+	log.Println("=======================================================")
+	log.Println("  ITSM Support - Resolution Time & SLA ML Dashboard    ")
+	log.Println("=======================================================")
 
 	db, err := database.Connect(dbURL)
 	if err != nil {
@@ -41,7 +41,7 @@ func main() {
 	seedCandidates := []string{
 		"../data/character_problems.json",
 		"data/character_problems.json",
-		"c:\\Users\\lacker\\Projects\\Hack2026\\data\\character_problems.json",
+		"../../data/character_problems.json",
 	}
 	for _, p := range seedCandidates {
 		if _, err := os.Stat(p); err == nil {

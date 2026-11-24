@@ -24,14 +24,14 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Brand & Title */}
       <div className="flex items-center gap-2.5 flex-shrink-0">
         <span className="bg-red-600 text-white font-black text-[11px] px-2 py-0.5 rounded tracking-wide shadow-sm shadow-red-950">
-          МТС
+          ITSM
         </span>
         <div className="flex items-baseline gap-2">
           <span className="font-bold text-slate-100 text-sm tracking-tight">
-            Инциденты в фокусе
+            Мониторинг заявок
           </span>
           <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
-            Мониторинг 24/7
+            Прогноз времени выполнения и SLA
           </span>
         </div>
       </div>

@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
-	"hack2026/backend/internal/database"
-	"hack2026/backend/internal/models"
+	"itsm-dashboard/backend/internal/database"
+	"itsm-dashboard/backend/internal/models"
 )
 
 type DemoHandler struct {
@@ -34,10 +35,10 @@ func (d *DemoHandler) CreateCritical(w http.ResponseWriter, r *http.Request) {
 		SubmitDate:                  &now,
 		Deadline:                    &deadline,
 		LastAssignmentToTeamDateTime: &now,
-		Header:                      "МАССОВЫЙ СБОЙ: Отказ авторизации пользователей KION в МЦОД",
-		Description:                 "Критический инцидент: недоступно ядро авторизации и стриминга KION в датацентре. Массовые жалобы абонентов. Требуется немедленная реакция координаторов и дежурных инженеров.",
-		ShortDescription:            "Отказ шлюза авторизации KION",
-		AssignedGroupName:           "КЦ ИТ Media L2 KION",
+		Header:                      "МАССОВЫЙ СБОЙ: Отказ шлюза авторизации стримингового сервиса в ЦОД",
+		Description:                 "Критический инцидент: недоступно ядро авторизации и стриминга медиа-сервиса в дата-центре. Массовые жалобы пользователей. Требуется немедленная реакция координаторов и дежурных инженеров.",
+		ShortDescription:            "Отказ шлюза авторизации стриминга",
+		AssignedGroupName:           "КЦ ИТ Media L2 Streaming",
 		AssignedEmployee:            "Иван Координаторов",
 		AssignedEmployeeLogin:       "ikoord",
 		InitiatorName:               "Система Мониторинга Zabbix",
@@ -48,9 +49,9 @@ func (d *DemoHandler) CreateCritical(w http.ResponseWriter, r *http.Request) {
 		Urgency:                     "Наивысшая",
 		ImpactID:                    4,
 		Impact:                      "Наивысшее",
-		ProductName:                 "Онлайн-кинотеатр KION",
-		ProductMasterID:             "BI_KION_CORE",
-		Service:                     "[KION] Сервис стриминга и профилей",
+		ProductName:                 "Стриминговая платформа MediaCore",
+		ProductMasterID:             "BI_MEDIA_CORE",
+		Service:                     "[MediaCore] Сервис стриминга и профилей",
 		ScenarioName:                "Авторизация и воспроизведение",
 		ServiceType:                 "Клиентский",
 		ServiceTypeID:               10,
@@ -179,8 +180,17 @@ func (d *DemoHandler) ResetData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	seedPath := "c:\\Users\\lacker\\Projects\\Hack2026\\data\\character_problems.json"
-	_ = d.db.SeedFromJSONIfEmpty(seedPath)
+	seedCandidates := []string{
+		"../data/character_problems.json",
+		"data/character_problems.json",
+		"../../data/character_problems.json",
+	}
+	for _, p := range seedCandidates {
+		if _, err := os.Stat(p); err == nil {
+			_ = d.db.SeedFromJSONIfEmpty(p)
+			break
+		}
+	}
 
 	d.sseHub.BroadcastEvent("DASHBOARD_RESET", nil, "Дашборд сброшен к исходным данным")
 

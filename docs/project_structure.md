@@ -1,6 +1,6 @@
-# Структура проекта Hack2026
+# Структура проекта
 
-Краткое описание всех файлов монорепозитория:
+Краткое описание всех файлов монорепозитория курсового проекта:
 
 ---
 
@@ -24,7 +24,7 @@
 * `backend/internal/api/router.go` — настройка роутинга Chi, CORS и раздачи статики фронтенда.
 * `backend/internal/api/incidents.go` — REST-обработчики инцидентов (`GET`, `POST`, `PUT`, статистика).
 * `backend/internal/api/sse.go` — брокер Server-Sent Events (SSE) для рассылки апдейтов в реальном времени.
-* `backend/internal/api/demo.go` — обработчики тестовых сценариев (авария KION, назначение, решение, сброс).
+* `backend/internal/api/demo.go` — обработчики тестовых сценариев (критический сбой MediaCore, назначение, решение, сброс).
 * `backend/internal/database/db.go` — пул соединений PostgreSQL, выполнение запросов и сидинг.
 * `backend/internal/database/schema.sql` — DDL-схема таблиц `incidents` и `incident_events`.
 * `backend/internal/ml/engine.go` — нативный Go-движок инференса риска эскалации и маршрутизации.
@@ -72,7 +72,7 @@
 ### `docs/` — Документация проекта
 * `docs/demo_simulation.md` — подробное описание механики работы демо-симуляции событий.
 * `docs/ai_trigger_events.md` — описание событий и триггеров запуска анализа ИИ.
-* `docs/how_ai_learns_from_db.md` — как ИИ обучается на данных БД и знает команды/продукты МТС.
+* `docs/how_ai_learns_from_db.md` — как ИИ обучается на данных БД и знает команды/продукты службы поддержки.
 * `docs/ai_predictions_tracking.md` — таблица ai_predictions: сбор обратной связи и датасет дообучения.
 * `docs/sla_prediction_model.md` — модель прогнозирования риска срыва SLA с учетом загрузки команд и MTTR.
 * `docs/project_structure.md` — текущий документ со структурой всех файлов проекта.

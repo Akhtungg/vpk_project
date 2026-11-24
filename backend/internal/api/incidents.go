@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"hack2026/backend/internal/database"
-	"hack2026/backend/internal/models"
+	"itsm-dashboard/backend/internal/database"
+	"itsm-dashboard/backend/internal/models"
 )
 
 type IncidentHandler struct {

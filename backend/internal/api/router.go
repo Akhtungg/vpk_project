@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"hack2026/backend/internal/database"
+	"itsm-dashboard/backend/internal/database"
 )
 
 func SetupRouter(db *database.DB) *chi.Mux {
@@ -65,7 +65,7 @@ func SetupRouter(db *database.DB) *chi.Mux {
 	distCandidates := []string{
 		"../frontend/dist",
 		"frontend/dist",
-		"c:\\Users\\lacker\\Projects\\Hack2026\\frontend\\dist",
+		"../../frontend/dist",
 	}
 	for _, distDir := range distCandidates {
 		if fi, err := os.Stat(distDir); err == nil && fi.IsDir() {

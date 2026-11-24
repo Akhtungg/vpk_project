@@ -87,7 +87,7 @@ export const IncidentDetailModal: React.FC<IncidentDetailModalProps> = ({
               <span className="text-slate-300 font-medium">Интеграция с корпоративным ITSM</span>
             </div>
             <a
-              href={`https://itsm.mts.ru/nav_to.do?uri=incident.do?sysparm_query=number=${incident.id}`}
+              href={`https://itsm.example.com/nav_to.do?uri=incident.do?sysparm_query=number=${incident.id}`}
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white font-medium px-3 py-1.5 rounded-lg text-xs transition-colors shadow-sm"
