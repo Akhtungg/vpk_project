@@ -427,7 +427,7 @@ func (h *IncidentHandler) ExportIncidentsCSV(w http.ResponseWriter, r *http.Requ
 	cw.Comma = ';'
 	_ = cw.Write([]string{
 		"ID", "Заголовок", "Статус", "Приоритет", "Продукт",
-		"Команда", "Исполнитель", "Очередь_команды", "Очередь_инженера",
+		"Команда_решения", "Очередь_команды",
 		"Прогноз_мин", "ДИ_80_мин", "ДИ_80_макс", "Медиана_истории_мин",
 		"Факт_мин", "Ошибка_мин", "Ручная_коррекция_мин",
 		"Риск_SLA_%", "Уровень_SLA", "Версия_модели",
@@ -453,9 +453,7 @@ func (h *IncidentHandler) ExportIncidentsCSV(w http.ResponseWriter, r *http.Requ
 			inc.Priority,
 			inc.ProductName,
 			inc.AssignedGroupName,
-			inc.AssignedEmployee,
 			strconv.Itoa(inc.AITeamWorkload),
-			strconv.Itoa(inc.AIAssigneeWorkload),
 			strconv.Itoa(inc.AIEstimatedMinutes),
 			strconv.Itoa(inc.AIEstimatedMinMinutes),
 			strconv.Itoa(inc.AIEstimatedMaxMinutes),

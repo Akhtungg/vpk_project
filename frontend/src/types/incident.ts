@@ -44,6 +44,8 @@ export interface Incident {
   scenarioName?: string
   isNeedUp?: boolean
   solution?: string
+  message?: string
+  isAccepted?: boolean
 
   // Unified Regression ML Enrichments (Routing, Execution Time, Queue & SLA Risk)
   aiRoutingHint: string
@@ -160,4 +162,23 @@ export interface MLMetricsResponse {
     evaluatedPredictions: number
     routingAcceptancePct: number
   }
+}
+
+export interface IncidentEvent {
+  id: number
+  incidentId: string
+  eventType: 'STATE_CHANGED' | 'REASSIGNED' | 'CREATED' | 'RESOLVED' | 'AI_ROUTING_RECOMMENDED' | string
+  message: string
+  payload?: unknown
+  createdAt: string
+}
+
+export interface NotificationItem {
+  id: string
+  type: 'CRITICAL_ALERT' | 'COORDINATOR_ALERT' | 'INCIDENT_RESOLVED' | 'INCIDENT_UPDATED' | 'STATE_CHANGED' | 'REASSIGNED' | 'INFO'
+  title: string
+  message: string
+  timestamp: string
+  read: boolean
+  incidentId?: string
 }

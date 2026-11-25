@@ -1,7 +1,22 @@
-import React from 'react'
-import { BarChart3, Bell, BellOff, Download, Radio, Search } from 'lucide-react'
+import React, { useEffect, useRef, useState } from 'react'
+import {
+  Bell,
+  BrainCircuit,
+  Check,
+  CheckCircle2,
+  Download,
+  Flame,
+  Search,
+  Trash2,
+  User,
+  Users,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-react'
+import type { DashboardStats, NotificationItem } from '../types/incident'
+import { soundAlert } from '../utils/audio'
 import { getExportCSVUrl } from '../services/api'
-import type { DashboardStats } from '../types/incident'
 
 interface HeaderProps {
   connected: boolean
@@ -9,7 +24,11 @@ interface HeaderProps {
   onSearchChange: (val: string) => void
   soundEnabled: boolean
   onToggleSound: () => void
-  stats: DashboardStats | null
+  stats?: DashboardStats | null
+  notifications?: NotificationItem[]
+  onMarkAllRead?: () => void
+  onClearNotifications?: () => void
+  onSelectIncidentById?: (id: string) => void
   onOpenMLMetrics: () => void
 }
 
@@ -19,125 +38,286 @@ export const Header: React.FC<HeaderProps> = ({
   onSearchChange,
   soundEnabled,
   onToggleSound,
-  stats,
+  notifications = [],
+  onMarkAllRead,
+  onClearNotifications,
+  onSelectIncidentById,
   onOpenMLMetrics,
 }) => {
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [currentTime, setCurrentTime] = useState(() => {
+    const now = new Date()
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  })
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const unreadCount = notifications.filter((n) => !n.read).length
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date()
+      setCurrentTime(
+        `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+      )
+    }, 10000)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowNotifications(false)
+      }
+    }
+    if (showNotifications) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showNotifications])
+
+  const handleOpenNotifications = () => {
+    setShowNotifications((prev) => !prev)
+    if (!showNotifications && unreadCount > 0 && onMarkAllRead) {
+      onMarkAllRead()
+    }
+  }
+
   return (
-    <header className="border-b border-slate-800 bg-slate-900/95 sticky top-0 z-30 px-4 py-2 flex items-center justify-between gap-3 text-xs">
-      {/* Brand & Title */}
-      <div className="flex items-center gap-2.5 flex-shrink-0">
-        <span className="bg-red-600 text-white font-black text-[11px] px-2 py-0.5 rounded tracking-wide shadow-sm shadow-red-950">
-          ITSM
-        </span>
+    <header className="border-b border-slate-200 bg-white sticky top-0 z-40 px-4 md:px-6 py-2.5 flex items-center justify-between gap-4 text-xs select-none">
+      {/* Left: Brand Logo & Title */}
+      <div className="flex items-center gap-3.5 flex-shrink-0">
+        <div
+          className="w-8 h-8 bg-[#E30611] rounded-[5px] flex items-center justify-center select-none flex-shrink-0 shadow-xs"
+          title="ITSM Мониторинг"
+        >
+          <span className="font-black text-white text-[10px] tracking-tighter">ITSM</span>
+        </div>
+
+        <div className="h-5 w-px bg-slate-200" />
+
         <div className="flex items-baseline gap-2">
-          <span className="font-bold text-slate-100 text-sm tracking-tight">
+          <span className="font-bold text-slate-900 text-sm tracking-tight">
             Мониторинг заявок
-          </span>
-          <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
-            Прогноз времени выполнения и SLA
           </span>
         </div>
       </div>
 
-      {/* Quick Status Ticker (compact glanceable stats) */}
-      {stats && (
-        <div className="hidden lg:flex items-center gap-2 text-[11px] font-medium bg-slate-950/70 px-3 py-1 rounded-lg border border-slate-800">
-          <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${stats.critical > 0 ? 'bg-red-500 animate-ping' : 'bg-slate-600'}`} />
-            <span className="text-slate-400">Критических:</span>
-            <span className={`font-bold font-mono ${stats.critical > 0 ? 'text-red-400' : 'text-slate-300'}`}>
-              {stats.critical}
-            </span>
-          </div>
-          <span className="text-slate-700">|</span>
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-400">На координаторах:</span>
-            <span className={`font-bold font-mono ${stats.assignedCoordinators > 0 ? 'text-amber-400' : 'text-slate-300'}`}>
-              {stats.assignedCoordinators}
-            </span>
-          </div>
-          <span className="text-slate-700">|</span>
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-400">Высокий приоритет:</span>
-            <span className="font-bold font-mono text-orange-400">{stats.highPriority}</span>
-          </div>
-          <span className="text-slate-700">|</span>
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-400">В работе:</span>
-            <span className="font-bold font-mono text-emerald-400">{stats.active}</span>
-          </div>
-          {stats.slaRiskCount !== undefined && stats.slaRiskCount > 0 && (
-            <>
-              <span className="text-slate-700">|</span>
-              <div className="flex items-center gap-1.5" title="Интеллектуальный прогноз риска срыва SLA">
-                <span className="text-amber-400">⏱️ Риск SLA:</span>
-                <span className="font-bold font-mono text-amber-300 bg-amber-950/60 px-1.5 py-0.2 rounded border border-amber-800/60">
-                  {stats.slaRiskCount}
-                </span>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Search & Status Controls */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {/* Compact Search */}
-        <div className="relative w-48 sm:w-64">
-          <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-500" />
+      {/* Center: Search input */}
+      <div className="flex-1 max-w-md mx-2">
+        <div className="relative">
+          <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
           <input
             type="text"
-            placeholder="Поиск по инцидентам..."
+            placeholder="Поиск по ID, продукту или команде"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-2.5 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-red-500 transition-colors"
+            className="w-full bg-[#F1F5F9] border border-transparent hover:border-slate-300 focus:border-[#E30611] focus:bg-white rounded-lg pl-9 pr-8 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none transition-all shadow-xs"
           />
+          {search && (
+            <button
+              onClick={() => onSearchChange('')}
+              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
+      </div>
 
-        {/* ML Metrics & Predictor modal trigger */}
+      {/* Right: ML Model, CSV, Live Status, Controls & Profile */}
+      <div className="flex items-center gap-2.5 flex-shrink-0">
         <button
           onClick={onOpenMLMetrics}
-          title="Метрики регрессионной модели ML и тест прогноза"
-          className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors text-[11px] font-medium"
+          className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-[11px] font-bold transition-colors cursor-pointer"
+          title="Метрики регрессионной модели ML и тест API прогноза"
         >
-          <BarChart3 className="h-3.5 w-3.5 text-sky-400" />
-          <span className="hidden md:inline">Модель ML</span>
+          <BrainCircuit className="h-3.5 w-3.5 text-purple-600" />
+          <span>Модель ML</span>
         </button>
 
-        {/* Export CSV */}
         <a
           href={getExportCSVUrl()}
-          title="Выгрузить отчёт по заявкам и прогнозам (CSV)"
-          className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors text-[11px] font-medium"
+          download="incidents_ml_report.csv"
+          className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-[11px] font-semibold transition-colors"
+          title="Экспорт всех заявок с прогнозом в CSV"
         >
-          <Download className="h-3.5 w-3.5 text-emerald-400" />
-          <span className="hidden md:inline">CSV</span>
+          <Download className="h-3.5 w-3.5 text-slate-500" />
+          <span>CSV</span>
         </a>
 
-        {/* Audio Mute toggle */}
+        {/* Live SSE Pulse */}
+        <div className="hidden sm:flex items-center gap-2 text-slate-600 font-medium bg-slate-100/80 px-2.5 py-1 rounded-full text-[11px]">
+          <span
+            className={`w-2 h-2 rounded-full ${
+              connected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+            }`}
+          />
+          <span>Обновлено {currentTime}</span>
+        </div>
+
+        {/* Sound toggle button */}
         <button
-          onClick={onToggleSound}
-          title={soundEnabled ? 'Звуковой сигнал включен' : 'Звук отключен'}
-          className={`p-1.5 rounded-lg border transition-colors ${
+          onClick={() => {
+            soundAlert.unlock()
+            onToggleSound()
+            if (!soundEnabled) {
+              soundAlert.playCoordinatorAlert()
+            }
+          }}
+          title={
             soundEnabled
-              ? 'bg-red-950/40 text-red-400 border-red-900/60 hover:bg-red-900/40'
-              : 'bg-slate-950 text-slate-500 border-slate-800 hover:text-slate-300'
+              ? 'Звуковые оповещения включены (нажмите для выключения)'
+              : 'Звук выключен (нажмите для включения)'
+          }
+          className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+            soundEnabled
+              ? 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+              : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
           }`}
         >
-          {soundEnabled ? <Bell className="h-3.5 w-3.5" /> : <BellOff className="h-3.5 w-3.5" />}
+          {soundEnabled ? (
+            <Volume2 className="h-4 w-4 text-[#E30611]" />
+          ) : (
+            <VolumeX className="h-4 w-4" />
+          )}
         </button>
 
-        {/* SSE Live status */}
+        {/* Notification Bell with Badge and Persistent History Dropdown */}
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={handleOpenNotifications}
+            className={`relative p-1.5 rounded-lg border transition-colors cursor-pointer ${
+              showNotifications
+                ? 'bg-slate-200 border-slate-300 text-slate-900'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+            title="Уведомления и события"
+          >
+            <Bell className="h-4 w-4" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-[#E30611] text-white text-[9px] font-bold rounded-full px-1 flex items-center justify-center animate-pulse shadow-xs">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {showNotifications && (
+            <div className="absolute right-0 mt-2 w-84 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 p-3.5 text-xs animate-in fade-in zoom-in-95 duration-100">
+              <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-900 text-sm">Центр уведомлений</span>
+                  {notifications.length > 0 && (
+                    <span className="bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded-full text-[10px]">
+                      {notifications.length}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && onMarkAllRead && (
+                    <button
+                      onClick={onMarkAllRead}
+                      className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
+                      title="Отметить все прочитанными"
+                    >
+                      <Check className="h-3 w-3" />
+                      <span>Прочитано</span>
+                    </button>
+                  )}
+                  {notifications.length > 0 && onClearNotifications && (
+                    <button
+                      onClick={onClearNotifications}
+                      className="text-[11px] font-semibold text-slate-400 hover:text-red-600 flex items-center gap-1 cursor-pointer"
+                      title="Очистить историю"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
+                {notifications.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 space-y-1">
+                    <Bell className="h-6 w-6 mx-auto text-slate-300 opacity-60" />
+                    <p className="font-medium text-slate-500">Нет уведомлений</p>
+                    <p className="text-[11px]">Все оповещения о сбоях и переходах отображаются здесь</p>
+                  </div>
+                ) : (
+                  notifications.map((item) => {
+                    const isCritical = item.type === 'CRITICAL_ALERT'
+                    const isCoordinator = item.type === 'COORDINATOR_ALERT'
+                    const isResolved = item.type === 'INCIDENT_RESOLVED'
+                    const targetIncidentId = item.incidentId || item.message.match(/INC\d+/)?.[0]
+
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          if (targetIncidentId && onSelectIncidentById) {
+                            onSelectIncidentById(targetIncidentId)
+                            setShowNotifications(false)
+                          }
+                        }}
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                          !item.read
+                            ? 'bg-red-50/30 border-red-100 hover:bg-red-50/60'
+                            : 'bg-slate-50 border-slate-100 hover:bg-slate-100/80'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[10px] mb-1 font-semibold">
+                          <span className="flex items-center gap-1.5">
+                            {isCritical && <Flame className="h-3.5 w-3.5 text-[#E30611]" />}
+                            {isCoordinator && <Users className="h-3.5 w-3.5 text-amber-600" />}
+                            {isResolved && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />}
+                            <span
+                              className={
+                                isCritical
+                                  ? 'text-[#E30611]'
+                                  : isCoordinator
+                                    ? 'text-amber-700'
+                                    : isResolved
+                                      ? 'text-emerald-700'
+                                      : 'text-slate-700'
+                              }
+                            >
+                              {item.title}
+                            </span>
+                          </span>
+                          <span className="text-slate-400 font-mono font-normal">
+                            {new Date(item.timestamp).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                        <p className="text-slate-800 text-[11px] font-medium leading-snug">
+                          {item.message}
+                        </p>
+                        {targetIncidentId && (
+                          <div className="mt-1.5 flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-sky-600 hover:text-sky-800 flex items-center gap-1">
+                              <span>Перейти к инциденту #{targetIncidentId}</span>
+                              <span>→</span>
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* User profile avatar */}
         <div
-          title={connected ? 'SSE подключено в реальном времени' : 'Переподключение к серверу...'}
-          className={`flex items-center gap-1 px-2 py-1 rounded-md border text-[10px] font-semibold tracking-wide uppercase ${
-            connected
-              ? 'bg-emerald-950/40 text-emerald-400 border-emerald-900/50'
-              : 'bg-amber-950/40 text-amber-400 border-amber-900/50 animate-pulse'
-          }`}
+          className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs shadow-xs cursor-pointer hover:bg-slate-200 transition-colors"
+          title="Оператор службы технической поддержки"
         >
-          <Radio className="h-3 w-3" />
-          <span className="hidden sm:inline">{connected ? 'LIVE' : 'CONN'}</span>
+          <User className="h-4 w-4 text-slate-700" />
         </div>
       </div>
     </header>

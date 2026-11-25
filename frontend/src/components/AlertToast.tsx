@@ -1,69 +1,103 @@
 import React, { useEffect } from 'react'
-import { AlertCircle, CheckCircle, Flame, Users, X } from 'lucide-react'
-import type { SSEMessage } from '../types/incident'
+import { AlertCircle, ArrowRightLeft, CheckCircle, Flame, Users, X } from 'lucide-react'
+import type { NotificationItem } from '../types/incident'
 
 interface AlertToastProps {
-  alerts: SSEMessage[]
-  onDismiss: (index: number) => void
+  toasts: NotificationItem[]
+  onDismiss: (id: string) => void
+  onSelectIncidentById?: (id: string) => void
 }
 
-export const AlertToast: React.FC<AlertToastProps> = ({ alerts, onDismiss }) => {
+export const AlertToast: React.FC<AlertToastProps> = ({
+  toasts,
+  onDismiss,
+  onSelectIncidentById,
+}) => {
   useEffect(() => {
-    if (alerts.length > 0) {
-      const timer = setTimeout(() => {
-        onDismiss(alerts.length - 1)
-      }, 7000)
-      return () => clearTimeout(timer)
-    }
-  }, [alerts, onDismiss])
+    if (toasts.length === 0) return
+    const newest = toasts[0]
+    const timer = setTimeout(() => {
+      onDismiss(newest.id)
+    }, 6000)
+    return () => clearTimeout(timer)
+  }, [toasts, onDismiss])
 
-  if (alerts.length === 0) return null
+  if (toasts.length === 0) return null
 
   return (
-    <div className="fixed top-16 right-6 z-50 space-y-2 max-w-md w-full pointer-events-none">
-      {alerts.map((al, idx) => {
-        const isCritical = al.type === 'CRITICAL_ALERT'
-        const isCoordinator = al.type === 'COORDINATOR_ALERT'
-        const isResolved = al.type === 'INCIDENT_RESOLVED'
+    <div className="fixed top-16 right-6 z-50 space-y-2.5 max-w-sm w-full pointer-events-none select-none">
+      {toasts.map((toast) => {
+        const isCritical = toast.type === 'CRITICAL_ALERT'
+        const isCoordinator = toast.type === 'COORDINATOR_ALERT'
+        const isResolved = toast.type === 'INCIDENT_RESOLVED'
+        const isStateChanged = toast.type === 'STATE_CHANGED'
+        const isReassigned = toast.type === 'REASSIGNED'
 
-        let bg = 'bg-slate-900 border-slate-750 text-slate-100'
-        let icon = <AlertCircle className="h-5 w-5 text-blue-400 flex-shrink-0" />
+        let bg = 'bg-white border-slate-200 text-slate-800 shadow-lg'
+        let icon = <AlertCircle className="h-5 w-5 text-blue-500 flex-shrink-0" />
 
         if (isCritical) {
-          bg = 'bg-red-950/95 border-red-600 text-white shadow-xl shadow-red-950/60 ring-1 ring-red-500 animate-bounce'
-          icon = <Flame className="h-5 w-5 text-red-400 flex-shrink-0" />
+          bg = 'bg-[#FFF5F5] border-red-300 text-slate-900 shadow-xl shadow-red-500/15 ring-1 ring-red-400'
+          icon = <Flame className="h-5 w-5 text-[#E30611] flex-shrink-0 animate-bounce" />
         } else if (isCoordinator) {
-          bg = 'bg-amber-950/95 border-amber-600 text-amber-50 shadow-xl shadow-amber-950/40 ring-1 ring-amber-500'
-          icon = <Users className="h-5 w-5 text-amber-400 flex-shrink-0" />
+          bg = 'bg-[#FFFBEB] border-amber-300 text-slate-900 shadow-xl shadow-amber-500/10'
+          icon = <Users className="h-5 w-5 text-amber-600 flex-shrink-0" />
         } else if (isResolved) {
-          bg = 'bg-emerald-950/95 border-emerald-600 text-emerald-50 shadow-xl shadow-emerald-950/40'
-          icon = <CheckCircle className="h-5 w-5 text-emerald-400 flex-shrink-0" />
+          bg = 'bg-[#F0FDF4] border-emerald-300 text-slate-900 shadow-xl shadow-emerald-500/10'
+          icon = <CheckCircle className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+        } else if (isStateChanged) {
+          bg = 'bg-[#EFF6FF] border-blue-200 text-slate-900 shadow-lg'
+          icon = <CheckCircle className="h-5 w-5 text-blue-600 flex-shrink-0" />
+        } else if (isReassigned) {
+          bg = 'bg-[#FAF5FF] border-purple-200 text-slate-900 shadow-lg'
+          icon = <ArrowRightLeft className="h-5 w-5 text-purple-600 flex-shrink-0" />
         }
+
+        const targetIncidentId = toast.incidentId || toast.message.match(/INC\d+/)?.[0]
 
         return (
           <div
-            key={idx}
-            className={`pointer-events-auto p-4 rounded-xl border flex items-start gap-3 backdrop-blur transition-all duration-200 ${bg}`}
+            key={toast.id}
+            onClick={() => {
+              if (targetIncidentId && onSelectIncidentById) {
+                onSelectIncidentById(targetIncidentId)
+                onDismiss(toast.id)
+              }
+            }}
+            className={`pointer-events-auto p-3.5 rounded-xl border flex items-start gap-3 backdrop-blur-sm transition-all duration-200 animate-in fade-in slide-in-from-top-2 ${
+              targetIncidentId ? 'cursor-pointer hover:scale-[1.01]' : ''
+            } ${bg}`}
           >
             {icon}
-            <div className="flex-1 text-xs">
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-bold uppercase tracking-wider text-[10px] opacity-80">
-                  {isCritical
-                    ? 'Срочное оповещение'
-                    : isCoordinator
-                    ? 'Назначение координатору'
-                    : isResolved
-                    ? 'Инцидент решен'
-                    : 'Событие дашборда'}
+            <div className="flex-1 text-xs min-w-0">
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="font-bold uppercase tracking-wider text-[10px] text-slate-500 truncate mr-2">
+                  {toast.title}
                 </span>
-                <span className="text-[10px] opacity-60">Только что</span>
+                <span className="text-[10px] text-slate-400 font-mono flex-shrink-0">
+                  {new Date(toast.timestamp).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })}
+                </span>
               </div>
-              <p className="font-medium leading-snug">{al.message}</p>
+              <p className="font-semibold text-slate-900 leading-snug break-words">
+                {toast.message}
+              </p>
+              {targetIncidentId && (
+                <span className="inline-block mt-1.5 text-[10px] font-bold text-sky-600 hover:underline">
+                  Перейти к инциденту #{targetIncidentId} →
+                </span>
+              )}
             </div>
             <button
-              onClick={() => onDismiss(idx)}
-              className="p-1 rounded-md opacity-60 hover:opacity-100 transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDismiss(toast.id)
+              }}
+              className="text-slate-400 hover:text-slate-700 p-1 rounded-lg transition-colors cursor-pointer flex-shrink-0"
+              title="Закрыть"
             >
               <X className="h-4 w-4" />
             </button>

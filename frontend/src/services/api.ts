@@ -81,3 +81,30 @@ export async function demoResetData(): Promise<void> {
   const res = await fetch(`${API_BASE}/demo/reset`, { method: 'POST' })
   if (!res.ok) throw new Error('Failed to reset data')
 }
+
+export async function getIncidentEvents(id: string): Promise<import('../types/incident').IncidentEvent[]> {
+  try {
+    const res = await fetch(`${API_BASE}/incidents/${encodeURIComponent(id)}/events`)
+    if (res.ok) {
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        const uniqueEvents: import('../types/incident').IncidentEvent[] = []
+        const seen = new Set<string>()
+        for (const evt of data) {
+          const timeSec = evt.createdAt ? new Date(evt.createdAt).toISOString().substring(0, 19) : ''
+          const key = `${evt.eventType}_${evt.message}_${timeSec}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            uniqueEvents.push(evt)
+          }
+        }
+        return uniqueEvents.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
+      }
+    }
+  } catch (err) {
+    console.warn('[API] Could not fetch incident events from backend', err)
+  }
+  return []
+}

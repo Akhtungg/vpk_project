@@ -670,10 +670,10 @@ func (e *Engine) computeTopFactors(x []float64, actualPredHours float64) []model
 	}
 	groups := []factorGroup{
 		{name: "История аналогичных заявок", indices: []int{6}},
-		{name: "Загрузка команды и исполнителя", indices: []int{4, 5}},
+		{name: "Загруженность команды (очередь)", indices: []int{4, 5}},
 		{name: "Семантика текста (ruBERT)", indices: []int{11, 12, 13}},
 		{name: "Приоритет и критичность", indices: []int{0, 1, 2}},
-		{name: "Скорость работы исполнителя", indices: []int{7}},
+		{name: "Профиль производительности команды", indices: []int{7}},
 		{name: "Регламент SLA и категория", indices: []int{3, 8}},
 		{name: "Время суток и рабочие часы", indices: []int{9, 10}},
 	}
