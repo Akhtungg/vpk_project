@@ -11,15 +11,16 @@ import { MLMetricsModal } from './components/MLMetricsModal'
 import { OverviewDashboard } from './components/OverviewDashboard'
 import { ToolbarFilters } from './components/ToolbarFilters'
 import { AlertToast } from './components/AlertToast'
-import { getIncidentById, getIncidents, getStats, updateIncident } from './services/api'
+import { getIncidentById, getIncidents, getStats, getTeams, updateIncident } from './services/api'
 import { sseService } from './services/sse'
-import type { DashboardStats, Incident, NotificationItem } from './types/incident'
+import type { DashboardStats, Incident, NotificationItem, TeamSummary } from './types/incident'
 import { soundAlert } from './utils/audio'
 
 type ViewMode = 'kanban' | 'overview' | 'table'
 
 export function App() {
   const [incidents, setIncidents] = useState<Incident[]>([])
+  const [teamsData, setTeamsData] = useState<TeamSummary[]>([])
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [search, setSearch] = useState('')
   const [dateFilter, setDateFilter] = useState('all')
@@ -93,9 +94,14 @@ export function App() {
 
   const loadData = useCallback(async () => {
     try {
-      const [incList, statsData] = await Promise.all([getIncidents(), getStats()])
+      const [incList, statsData, teamList] = await Promise.all([
+        getIncidents(),
+        getStats(),
+        getTeams().catch(() => []),
+      ])
       setIncidents(incList)
       setStats(statsData)
+      setTeamsData(teamList)
 
       if (!hasInitialAlertsLoaded.current) {
         hasInitialAlertsLoaded.current = true
@@ -129,7 +135,9 @@ export function App() {
 
   const handleSelectIncidentById = useCallback(
     async (id: string) => {
-      let found = incidents.find((i) => i.id === id || i.sysId === id)
+      let found = incidents.find(
+        (i) => i.id === id || i.ticketNumber === id || i.sysId === id
+      )
       if (!found) {
         try {
           found = await getIncidentById(id)
@@ -285,6 +293,7 @@ export function App() {
         const q = search.toLowerCase()
         const matchesSearch =
           inc.id.toLowerCase().includes(q) ||
+          (inc.ticketNumber && inc.ticketNumber.toLowerCase().includes(q)) ||
           inc.header.toLowerCase().includes(q) ||
           (inc.productName && inc.productName.toLowerCase().includes(q)) ||
           (inc.assignedGroupName && inc.assignedGroupName.toLowerCase().includes(q))
@@ -577,6 +586,7 @@ export function App() {
               <OverviewDashboard
                 stats={stats}
                 incidents={filteredIncidents}
+                teamsData={teamsData}
                 onSelectIncident={setSelectedIncident}
                 onSelectTeam={(team) => {
                   setTeamFilter(team)
@@ -591,6 +601,7 @@ export function App() {
             <main className="flex-1 overflow-y-auto pr-1">
               <IncidentTableView
                 incidents={stableSort(filteredIncidents)}
+                teamsData={teamsData}
                 onSelectIncident={setSelectedIncident}
                 onQuickReassign={handleQuickReassign}
                 selectedTeamFilter={teamFilter}

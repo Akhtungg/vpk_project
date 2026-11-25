@@ -252,8 +252,11 @@ const IncidentDetailContent: React.FC<{
                 </span>
               )}
             </div>
-            <div className="mt-1 text-xs font-mono font-medium text-slate-400">
-              {incident.id}
+            <div className="mt-1 flex items-center gap-3 text-xs font-mono font-medium text-slate-400">
+              <span>{incident.ticketNumber || incident.id}</span>
+              <span className="text-[10px] text-slate-300" title="UUID в базе данных">
+                UUID: {incident.id}
+              </span>
             </div>
           </div>
           <button
@@ -730,7 +733,9 @@ const IncidentDetailContent: React.FC<{
                       className="p-3 rounded-xl border border-slate-200 hover:border-[#E30611] bg-slate-50/70 hover:bg-white cursor-pointer transition-all"
                     >
                       <div className="flex items-center justify-between text-[11px] mb-1">
-                        <span className="font-mono font-bold text-slate-500">{rel.id}</span>
+                        <span className="font-mono font-bold text-slate-500">
+                          {rel.ticketNumber || rel.id}
+                        </span>
                         <span className="font-semibold text-slate-600">{rel.state}</span>
                       </div>
                       <p className="text-xs font-bold text-slate-900 line-clamp-1 mb-1">

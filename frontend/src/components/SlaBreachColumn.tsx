@@ -114,7 +114,7 @@ export const SlaBreachColumn: React.FC<SlaBreachColumnProps> = ({
                   </div>
 
                   <div className="font-mono text-[11px] font-semibold text-slate-400 group-hover:text-slate-600 mb-1 transition-colors">
-                    {incident.id}
+                    {incident.ticketNumber || incident.id}
                   </div>
 
                   <h3 className="font-bold text-slate-900 text-xs leading-snug line-clamp-2 mb-2">

@@ -3,9 +3,27 @@ export interface FactorContribution {
   impactHours: number
 }
 
+export interface TeamSummary {
+  id: string
+  name: string
+  isCoordinator: boolean
+  activeCount: number
+  totalCount: number
+  queueCount: number
+  avgEstimatedMinutes: number
+  avgSlaRisk: number
+  historicalMedianMinutes: number
+  createdAt?: string
+  updatedAt?: string
+}
+
 export interface Incident {
   id: string
+  ticketNumber: string
   sysId?: string
+  teamId?: string
+  serviceRefId?: string
+  recommendedTeamId?: string
   state: string
   stateEnum?: string
   stateId: number
@@ -19,8 +37,6 @@ export interface Incident {
   description: string
   shortDescription?: string
   assignedGroupName: string
-  assignedEmployee?: string
-  assignedEmployeeLogin?: string
   initiatorName?: string
   initiatorLogin?: string
   isEffect?: boolean
@@ -165,7 +181,7 @@ export interface MLMetricsResponse {
 }
 
 export interface IncidentEvent {
-  id: number
+  id: string
   incidentId: string
   eventType: 'STATE_CHANGED' | 'REASSIGNED' | 'CREATED' | 'RESOLVED' | 'AI_ROUTING_RECOMMENDED' | string
   message: string

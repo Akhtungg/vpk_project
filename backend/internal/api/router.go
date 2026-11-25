@@ -41,8 +41,9 @@ func SetupRouter(db *database.DB) *chi.Mux {
 		// SSE Stream
 		api.Get("/events", sseHub.ServeHTTP)
 
-		// Stats
+		// Stats & Teams
 		api.Get("/stats", incidentHandler.GetStats)
+		api.Get("/teams", incidentHandler.GetTeams)
 
 		// Incidents CRUD & Export
 		api.Get("/incidents", incidentHandler.GetIncidents)

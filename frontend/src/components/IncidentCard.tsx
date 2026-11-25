@@ -100,10 +100,10 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({
       className="group bg-white rounded-xl border border-slate-200/90 hover:border-slate-300 hover:shadow-md transition-all duration-150 p-3.5 flex flex-col justify-between cursor-pointer text-xs"
     >
       <div>
-        {/* Top Line: ID & Priority Badge */}
+        {/* Top Line: Ticket Number & Priority Badge */}
         <div className="flex items-center justify-between gap-2 mb-2">
           <span className="font-mono text-xs font-semibold text-slate-400 group-hover:text-slate-600 transition-colors">
-            {incident.id}
+            {incident.ticketNumber || incident.id}
           </span>
           {getPriorityBadge(incident.priority, incident.priorityId)}
         </div>

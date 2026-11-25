@@ -9,10 +9,28 @@ type FactorContribution struct {
 	ImpactHours float64 `json:"impactHours"`
 }
 
-// Incident represents the ITSM incident data structure
+// Team represents a normalized resolution team entity from the teams table.
+type Team struct {
+	ID                      string    `json:"id"`
+	Name                    string    `json:"name"`
+	IsCoordinator           bool      `json:"isCoordinator"`
+	ActiveCount             int       `json:"activeCount"`
+	TotalCount              int       `json:"totalCount"`
+	QueueCount              int       `json:"queueCount"`
+	AvgEstimatedMinutes     int       `json:"avgEstimatedMinutes"`
+	AvgSLARisk              float64   `json:"avgSlaRisk"`
+	HistoricalMedianMinutes int       `json:"historicalMedianMinutes"`
+	CreatedAt               time.Time `json:"createdAt"`
+	UpdatedAt               time.Time `json:"updatedAt"`
+}
+
+// Incident represents the normalized ITSM incident DTO joined across incidents, teams, services, and incident_forecasts.
 type Incident struct {
 	ID                           string     `json:"id"`
+	TicketNumber                 string     `json:"ticketNumber"`
 	SysID                        string     `json:"sysId,omitempty"`
+	TeamID                       *string    `json:"teamId,omitempty"`
+	ServiceIDRef                 *string    `json:"serviceRefId,omitempty"`
 	State                        string     `json:"state"`
 	StateEnum                    string     `json:"stateEnum,omitempty"`
 	StateID                      int        `json:"stateId"`
@@ -26,8 +44,8 @@ type Incident struct {
 	Description                  string     `json:"description"`
 	ShortDescription             string     `json:"shortDescription,omitempty"`
 	AssignedGroupName            string     `json:"assignedGroupName"`
-	AssignedEmployee             string     `json:"assignedEmployee,omitempty"`
-	AssignedEmployeeLogin        string     `json:"assignedEmployeeLogin,omitempty"`
+	AssignedEmployee             string     `json:"-"`
+	AssignedEmployeeLogin        string     `json:"-"`
 	InitiatorName                string     `json:"initiatorName,omitempty"`
 	InitiatorLogin               string     `json:"initiatorLogin,omitempty"`
 	IsEffect                     bool       `json:"isEffect"`
@@ -58,27 +76,28 @@ type Incident struct {
 	ReceivingChannel             string     `json:"receivingChannel,omitempty"`
 	Solution                     string     `json:"solution,omitempty"`
 
-	// Unified Regression ML Enrichments (Team Routing, Execution Time, Queue & SLA Risk)
+	// Unified Regression ML Enrichments (from incident_forecasts)
+	RecommendedTeamID       *string              `json:"recommendedTeamId,omitempty"`
 	AIRoutingHint           string               `json:"aiRoutingHint"`
 	AIRoutingConfidence     float64              `json:"aiRoutingConfidence"`
 	AIRoutingTop            []GroupScore         `json:"aiRoutingTop,omitempty"`
 	AISLARisk               float64              `json:"aiSlaRisk"`
 	AISLALevel              string               `json:"aiSlaLevel"` // "SAFE", "WARNING", "CRITICAL"
 	AITeamWorkload          int                  `json:"aiTeamWorkload"`
-	AIAssigneeWorkload      int                  `json:"aiAssigneeWorkload"`
+	AIAssigneeWorkload      int                  `json:"-"`
 	AIQueueRemainingMinutes int                  `json:"aiQueueRemainingMinutes"`
 	AIEstimatedMinutes      int                  `json:"aiEstimatedMinutes"`
 	AIEstimatedMinMinutes   int                  `json:"aiEstimatedMinMinutes"`
 	AIEstimatedMaxMinutes   int                  `json:"aiEstimatedMaxMinutes"`
 	AIHistoryMedianMinutes  int                  `json:"aiHistoryMedianMinutes"`
-	AIAssigneeSpeedFactor   float64              `json:"aiAssigneeSpeedFactor"`
+	AIAssigneeSpeedFactor   float64              `json:"-"`
 	AISLAMarginMinutes      int                  `json:"aiSlaMarginMinutes"`
 	AITopFactors            []FactorContribution `json:"aiTopFactors,omitempty"`
 	AILowConfidence         bool                 `json:"aiLowConfidence"`
 	AIFallbackUsed          bool                 `json:"aiFallbackUsed"`
 	AIModelVersion          string               `json:"aiModelVersion"`
-	AIAltAssignee           string               `json:"aiAltAssignee,omitempty"`
-	AIAltEstimatedMinutes   int                  `json:"aiAltEstimatedMinutes,omitempty"`
+	AIAltAssignee           string               `json:"-"`
+	AIAltEstimatedMinutes   int                  `json:"-"`
 
 	// Manual Override (F-12) & Actual Completion Error (F-13)
 	ManualOverrideMinutes  *int   `json:"manualOverrideMinutes,omitempty"`
@@ -100,22 +119,22 @@ type GroupScore struct {
 
 // SSEMessage represents events streamed to frontend
 type SSEMessage struct {
-	Type      string    `json:"type"` // "INCIDENT_CREATED", "INCIDENT_UPDATED", "CRITICAL_ALERT", "COORDINATOR_ALERT"
+	Type      string    `json:"type"`
 	Incident  *Incident `json:"incident,omitempty"`
 	Message   string    `json:"message"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// DashboardStats provides quick summary counters for the dashboard header
+// DashboardStats provides quick summary counters for the dashboard
 type DashboardStats struct {
 	Total                int `json:"total"`
-	Critical             int `json:"critical"`             // priorityId == 4 or priority == "Наивысший"
-	AssignedCoordinators int `json:"assignedCoordinators"` // assigned to coordinators
-	HighPriority         int `json:"highPriority"`         // priorityId == 3 or priority == "Высокий"
-	UnderInvestigation   int `json:"underInvestigation"`   // state == "Исследование ситуации"
-	Active               int `json:"active"`               // state != "Завершен" && state != "Закрыт"
-	Resolved             int `json:"resolved"`             // state == "Завершен" || state == "Закрыт"
-	SLARiskCount         int `json:"slaRiskCount"`         // aiSlaRisk >= 50% and active
+	Critical             int `json:"critical"`
+	AssignedCoordinators int `json:"assignedCoordinators"`
+	HighPriority         int `json:"highPriority"`
+	UnderInvestigation   int `json:"underInvestigation"`
+	Active               int `json:"active"`
+	Resolved             int `json:"resolved"`
+	SLARiskCount         int `json:"slaRiskCount"`
 }
 
 // PredictRequest mirrors the API contract for POST /api/v1/predict
@@ -124,7 +143,7 @@ type PredictRequest struct {
 	Category          string  `json:"category"`
 	Priority          string  `json:"priority"`
 	PriorityID        int     `json:"priority_id,omitempty"`
-	AssigneeID        string  `json:"assignee_id"`
+	AssigneeID        string  `json:"assignee_id,omitempty"`
 	AssignedGroupName string  `json:"assigned_group_name,omitempty"`
 	CreatedAt         string  `json:"created_at"`
 	SLATargetHours    float64 `json:"sla_target_hours"`
@@ -133,7 +152,7 @@ type PredictRequest struct {
 	ServiceType       string  `json:"service_type,omitempty"`
 }
 
-// PredictResponse returns regression forecast, CI, SLA risk, top factors, and recommendation
+// PredictResponse returns regression forecast, CI, SLA risk, top factors, and team recommendation
 type PredictResponse struct {
 	TicketID              string               `json:"ticket_id"`
 	PredictedTimeHours    float64              `json:"predicted_time_hours"`
@@ -142,12 +161,12 @@ type PredictResponse struct {
 	ConfidenceInterval    [2]float64           `json:"confidence_interval"`
 	SLAStatus             string               `json:"sla_status"`
 	SLARiskScore          float64              `json:"sla_risk_score"`
-	CurrentAssigneeLoad   int                  `json:"current_assignee_load"`
+	CurrentAssigneeLoad   int                  `json:"-"`
 	TeamWorkload          int                  `json:"team_workload"`
 	QueueRemainingHours   float64              `json:"queue_remaining_hours"`
 	HistoryCategoryMedian float64              `json:"history_category_median"`
 	RecommendedGroup      string               `json:"recommended_group,omitempty"`
-	RecommendedAssignee   string               `json:"recommended_assignee,omitempty"`
+	RecommendedAssignee   string               `json:"-"`
 	RecommendedTotalHours float64              `json:"recommended_total_hours,omitempty"`
 	TopFactors            []FactorContribution `json:"top_factors"`
 	ModelVersion          string               `json:"model_version"`

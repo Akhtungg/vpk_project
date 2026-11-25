@@ -28,6 +28,17 @@ func NewIncidentHandler(db *database.DB, sseHub *SSEHub) *IncidentHandler {
 	}
 }
 
+func (h *IncidentHandler) GetTeams(w http.ResponseWriter, r *http.Request) {
+	teams, err := h.db.GetTeams()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(teams)
+}
+
 func (h *IncidentHandler) GetIncidents(w http.ResponseWriter, r *http.Request) {
 	incidents, err := h.db.GetIncidents()
 	if err != nil {
@@ -42,11 +53,11 @@ func (h *IncidentHandler) GetIncidents(w http.ResponseWriter, r *http.Request) {
 	for _, inc := range incidents {
 		if search != "" {
 			match := strings.Contains(strings.ToLower(inc.ID), search) ||
+				strings.Contains(strings.ToLower(inc.TicketNumber), search) ||
 				strings.Contains(strings.ToLower(inc.Header), search) ||
 				strings.Contains(strings.ToLower(inc.Description), search) ||
 				strings.Contains(strings.ToLower(inc.ProductName), search) ||
-				strings.Contains(strings.ToLower(inc.AssignedGroupName), search) ||
-				strings.Contains(strings.ToLower(inc.AssignedEmployee), search)
+				strings.Contains(strings.ToLower(inc.AssignedGroupName), search)
 			if !match {
 				continue
 			}
@@ -59,7 +70,7 @@ func (h *IncidentHandler) GetIncidents(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 			case "coordinators":
-				if inc.AssignedGroupName != "КЦ ИТ Координаторы Массовых Инцидентов" {
+				if !strings.Contains(inc.AssignedGroupName, "Координатор") {
 					continue
 				}
 			case "high":
@@ -99,9 +110,8 @@ func (h *IncidentHandler) CreateIncident(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if inc.ID == "" {
-		http.Error(w, "Missing incident ID", http.StatusBadRequest)
-		return
+	if inc.ID == "" && inc.TicketNumber == "" {
+		inc.TicketNumber = fmt.Sprintf("INC%010d", time.Now().UnixNano()%1000000000)
 	}
 
 	if err := h.db.UpsertIncident(&inc); err != nil {
@@ -112,25 +122,26 @@ func (h *IncidentHandler) CreateIncident(w http.ResponseWriter, r *http.Request)
 	saved, _ := h.db.GetIncidentByID(inc.ID)
 	_ = h.db.RecordAIPrediction(saved)
 	_ = h.db.RecordEvent(saved.ID, "CREATED", "Инцидент зарегистрирован в системе", map[string]any{
-		"priority": saved.Priority,
-		"group":    saved.AssignedGroupName,
-		"sla_risk": saved.AISLARisk,
-		"est_min":  saved.AIEstimatedMinutes,
+		"ticket_number": saved.TicketNumber,
+		"priority":      saved.Priority,
+		"group":         saved.AssignedGroupName,
+		"sla_risk":      saved.AISLARisk,
+		"est_min":       saved.AIEstimatedMinutes,
 	})
 
-	h.sseHub.BroadcastEvent("INCIDENT_CREATED", saved, "Новый инцидент зарегистрирован: "+saved.ID)
+	h.sseHub.BroadcastEvent("INCIDENT_CREATED", saved, "Новый инцидент зарегистрирован: "+saved.TicketNumber)
 
 	if saved.PriorityID == 4 || saved.Priority == "Наивысший" {
 		h.sseHub.BroadcastEvent("CRITICAL_ALERT", saved, "🚨 КРИТИЧЕСКИЙ ИНЦИДЕНТ: "+saved.Header)
 	}
-	if saved.AssignedGroupName == "КЦ ИТ Координаторы Массовых Инцидентов" {
+	if strings.Contains(saved.AssignedGroupName, "Координатор") {
 		_ = h.db.RecordEvent(saved.ID, "AI_ROUTING_RECOMMENDED", "Регрессионная модель рекомендовала передать в: "+saved.AIRoutingHint, map[string]any{
 			"recommended_group": saved.AIRoutingHint,
 			"confidence":        saved.AIRoutingConfidence,
 			"sla_risk":          saved.AISLARisk,
 			"est_min":           saved.AIEstimatedMinutes,
 		})
-		h.sseHub.BroadcastEvent("COORDINATOR_ALERT", saved, "👤 Инцидент назначен на координаторов: "+saved.ID)
+		h.sseHub.BroadcastEvent("COORDINATOR_ALERT", saved, "Инцидент назначен на координаторов: "+saved.TicketNumber)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -166,12 +177,6 @@ func (h *IncidentHandler) UpdateIncident(w http.ResponseWriter, r *http.Request)
 	if updateData.AssignedGroupName != "" {
 		existing.AssignedGroupName = updateData.AssignedGroupName
 	}
-	if updateData.AssignedEmployee != "" {
-		existing.AssignedEmployee = updateData.AssignedEmployee
-	}
-	if updateData.AssignedEmployeeLogin != "" {
-		existing.AssignedEmployeeLogin = updateData.AssignedEmployeeLogin
-	}
 	if updateData.PriorityID != 0 {
 		existing.PriorityID = updateData.PriorityID
 		existing.Priority = updateData.Priority
@@ -199,42 +204,42 @@ func (h *IncidentHandler) UpdateIncident(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	saved, _ := h.db.GetIncidentByID(id)
+	saved, _ := h.db.GetIncidentByID(existing.ID)
 
 	if existing.AssignedGroupName != oldGroup {
-		_ = h.db.RecordEvent(id, "REASSIGNED", "Перенаправлен в команду: "+existing.AssignedGroupName, map[string]string{
+		_ = h.db.RecordEvent(existing.ID, "REASSIGNED", "Перенаправлен в команду: "+existing.AssignedGroupName, map[string]string{
 			"from": oldGroup,
 			"to":   existing.AssignedGroupName,
 		})
-		_ = h.db.UpdateAIPredictionFeedback(id, existing.AssignedGroupName)
+		_ = h.db.UpdateAIPredictionFeedback(existing.ID, existing.AssignedGroupName)
 	}
 	if existing.State != oldState {
-		_ = h.db.RecordEvent(id, "STATE_CHANGED", "Статус изменен на: "+existing.State, map[string]string{
+		_ = h.db.RecordEvent(existing.ID, "STATE_CHANGED", "Статус изменен на: "+existing.State, map[string]string{
 			"old": oldState,
 			"new": existing.State,
 		})
 	}
 	if (oldOverride == nil && existing.ManualOverrideMinutes != nil) ||
 		(oldOverride != nil && existing.ManualOverrideMinutes != nil && *oldOverride != *existing.ManualOverrideMinutes) {
-		_ = h.db.RecordEvent(id, "MANUAL_OVERRIDE", "Ручная корректировка прогноза диспетчером", map[string]any{
+		_ = h.db.RecordEvent(existing.ID, "MANUAL_OVERRIDE", "Ручная корректировка прогноза диспетчером", map[string]any{
 			"override_minutes": *existing.ManualOverrideMinutes,
 			"reason":           existing.ManualOverrideReason,
 		})
 	}
 
-	h.sseHub.BroadcastEvent("INCIDENT_UPDATED", saved, "Обновлен статус инцидента: "+saved.ID)
+	h.sseHub.BroadcastEvent("INCIDENT_UPDATED", saved, "Обновлен статус инцидента: "+saved.TicketNumber)
 
 	if saved.PriorityID == 4 || saved.Priority == "Наивысший" {
 		h.sseHub.BroadcastEvent("CRITICAL_ALERT", saved, "🚨 Эскалация в КРИТИЧЕСКИЙ: "+saved.Header)
 	}
-	if saved.AssignedGroupName == "КЦ ИТ Координаторы Массовых Инцидентов" {
+	if strings.Contains(saved.AssignedGroupName, "Координатор") {
 		_ = h.db.RecordEvent(saved.ID, "AI_ROUTING_RECOMMENDED", "Регрессионная модель рекомендовала передать в: "+saved.AIRoutingHint, map[string]any{
 			"recommended_group": saved.AIRoutingHint,
 			"confidence":        saved.AIRoutingConfidence,
 			"sla_risk":          saved.AISLARisk,
 			"est_min":           saved.AIEstimatedMinutes,
 		})
-		h.sseHub.BroadcastEvent("COORDINATOR_ALERT", saved, "👤 Передан координаторам: "+saved.ID)
+		h.sseHub.BroadcastEvent("COORDINATOR_ALERT", saved, "Передан координаторам: "+saved.TicketNumber)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -328,22 +333,20 @@ func (h *IncidentHandler) PredictTicket(w http.ResponseWriter, r *http.Request) 
 	}
 
 	inc := models.Incident{
-		ID:                    req.TicketID,
-		State:                 "Назначен",
-		SubmitDate:            &submitAt,
-		Deadline:              &deadline,
-		Header:                req.TitleText,
-		Description:           req.Description,
-		ProductName:           req.Category,
-		Service:               req.Category,
-		AssignedGroupName:     req.AssignedGroupName,
-		AssignedEmployee:      req.AssigneeID,
-		AssignedEmployeeLogin: req.AssigneeID,
-		PriorityID:            prioID,
-		Priority:              prioName,
-		UrgencyID:             prioID,
-		ImpactID:              prioID,
-		ServiceType:           svcType,
+		TicketNumber:      req.TicketID,
+		State:             "Назначен",
+		SubmitDate:        &submitAt,
+		Deadline:          &deadline,
+		Header:            req.TitleText,
+		Description:       req.Description,
+		ProductName:       req.Category,
+		Service:           req.Category,
+		AssignedGroupName: req.AssignedGroupName,
+		PriorityID:        prioID,
+		Priority:          prioName,
+		UrgencyID:         prioID,
+		ImpactID:          prioID,
+		ServiceType:       svcType,
 	}
 
 	ctx, _ := h.db.GetRuntimeContext()
@@ -373,13 +376,10 @@ func (h *IncidentHandler) PredictTicket(w http.ResponseWriter, r *http.Request) 
 		ConfidenceInterval:    [2]float64{minHours, maxHours},
 		SLAStatus:             slaStatus,
 		SLARiskScore:          math.Round((inc.AISLARisk/100.0)*1000) / 1000,
-		CurrentAssigneeLoad:   inc.AIAssigneeWorkload,
 		TeamWorkload:          inc.AITeamWorkload,
 		QueueRemainingHours:   queueHours,
 		HistoryCategoryMedian: histMedianHours,
 		RecommendedGroup:      inc.AIRoutingHint,
-		RecommendedAssignee:   inc.AIAltAssignee,
-		RecommendedTotalHours: math.Round((float64(inc.AIAltEstimatedMinutes)/60.0)*100) / 100,
 		TopFactors:            inc.AITopFactors,
 		ModelVersion:          inc.AIModelVersion,
 		Fallback:              inc.AIFallbackUsed,
@@ -409,7 +409,7 @@ func (h *IncidentHandler) GetMLMetrics(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// ExportIncidentsCSV exports the incidents registry with ML forecasts and actuals as UTF-8 CSV.
+// ExportIncidentsCSV exports the incidents registry with ML forecasts and team statistics as UTF-8 CSV.
 func (h *IncidentHandler) ExportIncidentsCSV(w http.ResponseWriter, r *http.Request) {
 	incidents, err := h.db.GetIncidents()
 	if err != nil {
@@ -420,13 +420,12 @@ func (h *IncidentHandler) ExportIncidentsCSV(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"incidents_sla_report_%s.csv\"", time.Now().Format("20060102_1504")))
 
-	// UTF-8 BOM for Microsoft Excel compatibility
 	_, _ = w.Write([]byte{0xEF, 0xBB, 0xBF})
 
 	cw := csv.NewWriter(w)
 	cw.Comma = ';'
 	_ = cw.Write([]string{
-		"ID", "Заголовок", "Статус", "Приоритет", "Продукт",
+		"UUID", "Номер_заявки", "Заголовок", "Статус", "Приоритет", "Продукт",
 		"Команда_решения", "Очередь_команды",
 		"Прогноз_мин", "ДИ_80_мин", "ДИ_80_макс", "Медиана_истории_мин",
 		"Факт_мин", "Ошибка_мин", "Ручная_коррекция_мин",
@@ -448,6 +447,7 @@ func (h *IncidentHandler) ExportIncidentsCSV(w http.ResponseWriter, r *http.Requ
 		}
 		_ = cw.Write([]string{
 			inc.ID,
+			inc.TicketNumber,
 			inc.Header,
 			inc.State,
 			inc.Priority,

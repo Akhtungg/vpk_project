@@ -14,7 +14,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import type { Incident } from '../types/incident'
+import type { Incident, TeamSummary } from '../types/incident'
 import { getExportCSVUrl } from '../services/api'
 
 export type SortColumn =
@@ -40,11 +40,11 @@ interface ColumnConfig {
 const COLUMNS: ColumnConfig[] = [
   {
     key: 'id',
-    label: 'ID',
+    label: 'Номер',
     primaryDir: 'asc',
-    ascDescription: 'Сверху вниз (по возрастанию ID)',
-    descDescription: 'Снизу вверх (по убыванию ID)',
-    getFilterValue: (inc) => inc.id || '',
+    ascDescription: 'Сверху вниз (по возрастанию номера)',
+    descDescription: 'Снизу вверх (по убыванию номера)',
+    getFilterValue: (inc) => inc.ticketNumber || inc.id || '',
   },
   {
     key: 'header',
@@ -133,7 +133,7 @@ const compareIncidents = (
   let diff = 0
   switch (col) {
     case 'id':
-      diff = (a.id || '').localeCompare(b.id || '', undefined, {
+      diff = (a.ticketNumber || a.id || '').localeCompare(b.ticketNumber || b.id || '', undefined, {
         numeric: true,
         sensitivity: 'base',
       })
@@ -179,6 +179,7 @@ const compareIncidents = (
 
 interface IncidentTableViewProps {
   incidents: Incident[]
+  teamsData?: TeamSummary[]
   onSelectIncident: (inc: Incident) => void
   onQuickReassign?: (inc: Incident, targetGroup: string) => void
   selectedTeamFilter?: string
@@ -187,6 +188,7 @@ interface IncidentTableViewProps {
 
 export const IncidentTableView: React.FC<IncidentTableViewProps> = ({
   incidents,
+  teamsData = [],
   onSelectIncident,
   selectedTeamFilter = '',
   onSelectTeamFilter,
@@ -220,8 +222,23 @@ export const IncidentTableView: React.FC<IncidentTableViewProps> = ({
     return () => document.removeEventListener('mousedown', handleOutsideClick)
   }, [openFilterCol])
 
-  // Aggregate resolution team statistics (active tickets, queue, avg ML duration, avg SLA risk)
+  // Aggregate resolution team statistics from normalized teams table (with fallback)
   const teamStats = useMemo(() => {
+    if (teamsData.length > 0 && !selectedTeamFilter) {
+      return [...teamsData]
+        .filter((t) => t.totalCount > 0)
+        .sort((a, b) => b.activeCount - a.activeCount || b.totalCount - a.totalCount)
+        .slice(0, 8)
+        .map((t) => ({
+          id: t.id,
+          team: t.name,
+          total: t.totalCount,
+          active: t.activeCount,
+          queue: t.queueCount,
+          avgEstMin: t.avgEstimatedMinutes,
+          avgSla: Math.round(t.avgSlaRisk),
+        }))
+    }
     const map = new Map<
       string,
       {
@@ -276,7 +293,16 @@ export const IncidentTableView: React.FC<IncidentTableViewProps> = ({
         return b.total - a.total
       })
       .slice(0, 8)
-  }, [incidents])
+      .map((ts) => ({
+        id: ts.team,
+        team: ts.team,
+        total: ts.total,
+        active: ts.active,
+        queue: ts.queue,
+        avgEstMin: ts.estCount > 0 ? Math.round(ts.estSumMin / ts.estCount) : 0,
+        avgSla: ts.slaCount > 0 ? Math.round(ts.slaSum / ts.slaCount) : 0,
+      }))
+  }, [incidents, teamsData, selectedTeamFilter])
 
   const handleSort = (colKey: SortColumn) => {
     const col = COLUMNS.find((c) => c.key === colKey)
@@ -395,7 +421,8 @@ export const IncidentTableView: React.FC<IncidentTableViewProps> = ({
 
   const handleExportCSV = () => {
     const headers = [
-      'ID',
+      'UUID',
+      'Номер заявки',
       'Тема инцидента',
       'Продукт',
       'Приоритет',
@@ -417,6 +444,7 @@ export const IncidentTableView: React.FC<IncidentTableViewProps> = ({
       const factH = inc.actualDurationMinutes ? (inc.actualDurationMinutes / 60).toFixed(2) : ''
       return [
         `"${(inc.id || '').replace(/"/g, '""')}"`,
+        `"${(inc.ticketNumber || inc.id || '').replace(/"/g, '""')}"`,
         `"${(inc.header || '').replace(/"/g, '""')}"`,
         `"${(inc.productName || inc.service || 'ИТ-сервис').replace(/"/g, '""')}"`,
         `"${inc.priority || (inc.priorityId === 4 ? 'Наивысший' : inc.priorityId === 3 ? 'Высокий' : inc.priorityId === 2 ? 'Средний' : 'Низкий')}"`,
@@ -535,12 +563,10 @@ export const IncidentTableView: React.FC<IncidentTableViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
             {teamStats.map((ts) => {
               const isSelected = selectedTeamFilter === ts.team
-              const avgEstH =
-                ts.estCount > 0 ? (ts.estSumMin / ts.estCount / 60).toFixed(1) : '—'
-              const avgSla = ts.slaCount > 0 ? Math.round(ts.slaSum / ts.slaCount) : 0
+              const avgEstH = ts.avgEstMin > 0 ? (ts.avgEstMin / 60).toFixed(1) : '—'
               return (
                 <button
-                  key={ts.team}
+                  key={ts.id}
                   type="button"
                   onClick={() =>
                     onSelectTeamFilter && onSelectTeamFilter(isSelected ? '' : ts.team)
@@ -568,14 +594,14 @@ export const IncidentTableView: React.FC<IncidentTableViewProps> = ({
                     </span>
                     <span
                       className={
-                        avgSla >= 70
+                        ts.avgSla >= 70
                           ? 'text-[#E30611] font-bold'
-                          : avgSla >= 40
+                          : ts.avgSla >= 40
                             ? 'text-amber-700 font-semibold'
                             : 'text-emerald-700 font-semibold'
                       }
                     >
-                      SLA {avgSla}%
+                      SLA {ts.avgSla}%
                     </span>
                   </div>
                 </button>
@@ -921,7 +947,7 @@ export const IncidentTableView: React.FC<IncidentTableViewProps> = ({
                             : 'text-slate-600 group-hover:text-slate-900'
                         }`}
                       >
-                        {inc.id}
+                        {inc.ticketNumber || inc.id}
                       </td>
                       <td
                         className={`py-3.5 px-4 font-bold text-slate-900 max-w-xs truncate transition-colors ${

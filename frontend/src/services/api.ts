@@ -1,4 +1,11 @@
-import type { DashboardStats, Incident, MLMetricsResponse, PredictRequest, PredictResponse } from '../types/incident'
+import type {
+  DashboardStats,
+  Incident,
+  MLMetricsResponse,
+  PredictRequest,
+  PredictResponse,
+  TeamSummary,
+} from '../types/incident'
 
 const API_BASE = '/api'
 
@@ -9,7 +16,15 @@ export async function getIncidents(search = '', group = ''): Promise<Incident[]>
 
   const res = await fetch(`${API_BASE}/incidents?${params.toString()}`)
   if (!res.ok) throw new Error('Failed to fetch incidents')
-  return res.json()
+  const data = await res.json()
+  return Array.isArray(data) ? data : []
+}
+
+export async function getTeams(): Promise<TeamSummary[]> {
+  const res = await fetch(`${API_BASE}/teams`)
+  if (!res.ok) throw new Error('Failed to fetch teams')
+  const data = await res.json()
+  return Array.isArray(data) ? data : []
 }
 
 export async function getIncidentById(id: string): Promise<Incident> {

@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react'
 import { Clock } from 'lucide-react'
-import type { DashboardStats, Incident } from '../types/incident'
+import type { DashboardStats, Incident, TeamSummary } from '../types/incident'
 
 interface OverviewDashboardProps {
   stats: DashboardStats | null
   incidents: Incident[]
+  teamsData?: TeamSummary[]
   onSelectIncident?: (inc: Incident) => void
   onSelectTeam?: (team: string) => void
 }
@@ -12,6 +13,7 @@ interface OverviewDashboardProps {
 export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   stats,
   incidents,
+  teamsData = [],
   onSelectIncident,
   onSelectTeam,
 }) => {
@@ -122,8 +124,22 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
       .slice(0, 20)
   }, [activePool])
 
-  // Team resolution statistics (queue, avg ML forecast, SLA risk)
+  // Team resolution statistics from normalized teams table (with client fallback)
   const teamLeaderboard = useMemo(() => {
+    if (teamsData.length > 0) {
+      return [...teamsData]
+        .filter((t) => t.activeCount > 0 || t.totalCount > 0)
+        .sort((a, b) => b.activeCount - a.activeCount || b.totalCount - a.totalCount)
+        .slice(0, 8)
+        .map((t) => ({
+          id: t.id,
+          team: t.name,
+          active: t.activeCount,
+          queue: t.queueCount,
+          avgEstMin: t.avgEstimatedMinutes,
+          avgSla: Math.round(t.avgSlaRisk),
+        }))
+    }
     const map = new Map<
       string,
       { team: string; active: number; queue: number; estSum: number; estCnt: number; slaSum: number; slaCnt: number }
@@ -149,7 +165,15 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
     return Array.from(map.values())
       .sort((a, b) => b.active - a.active)
       .slice(0, 8)
-  }, [activePool])
+      .map((item) => ({
+        id: item.team,
+        team: item.team,
+        active: item.active,
+        queue: item.queue,
+        avgEstMin: item.estCnt > 0 ? Math.round(item.estSum / item.estCnt) : 0,
+        avgSla: item.slaCnt > 0 ? Math.round(item.slaSum / item.slaCnt) : 0,
+      }))
+  }, [activePool, teamsData])
 
   const getPriorityDot = (inc: Incident) => {
     if (inc.priorityId === 4 || inc.priority === 'Наивысший' || inc.priority === 'Критический') {
@@ -316,11 +340,10 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {teamLeaderboard.map((item) => {
-              const avgH = item.estCnt > 0 ? (item.estSum / item.estCnt / 60).toFixed(1) : '—'
-              const avgSla = item.slaCnt > 0 ? Math.round(item.slaSum / item.slaCnt) : 0
+              const avgH = item.avgEstMin > 0 ? (item.avgEstMin / 60).toFixed(1) : '—'
               return (
                 <button
-                  key={item.team}
+                  key={item.id}
                   type="button"
                   onClick={() => onSelectTeam && onSelectTeam(item.team)}
                   className="text-left p-3 rounded-xl border border-slate-200/80 bg-slate-50/70 hover:bg-white hover:border-[#E30611] transition-all cursor-pointer"
@@ -342,14 +365,14 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                     </span>
                     <span
                       className={
-                        avgSla >= 70
+                        item.avgSla >= 70
                           ? 'text-[#E30611] font-bold'
-                          : avgSla >= 40
+                          : item.avgSla >= 40
                             ? 'text-amber-700 font-semibold'
                             : 'text-emerald-700 font-semibold'
                       }
                     >
-                      SLA {avgSla}%
+                      SLA {item.avgSla}%
                     </span>
                   </div>
                 </button>
@@ -398,7 +421,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                     <td className="py-3 px-3 flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full ${getPriorityDot(inc)} flex-shrink-0`} />
                       <span className="font-semibold text-slate-900 group-hover:text-[#E30611] transition-colors">
-                        #{inc.id}
+                        #{inc.ticketNumber || inc.id}
                       </span>
                     </td>
 
