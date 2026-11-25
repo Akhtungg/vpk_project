@@ -27,16 +27,14 @@
 * `backend/internal/api/demo.go` — обработчики тестовых сценариев (критический сбой MediaCore, назначение, решение, сброс).
 * `backend/internal/database/db.go` — пул соединений PostgreSQL, выполнение запросов и сидинг.
 * `backend/internal/database/schema.sql` — DDL-схема таблиц `incidents` и `incident_events`.
-* `backend/internal/ml/engine.go` — нативный Go-движок инференса риска эскалации и маршрутизации.
+* `backend/internal/ml/engine.go` — нативный Go-движок единой регрессионной модели (прогноз времени, SLA-риск и маршрутизация).
 * `backend/internal/models/incident.go` — Go-структуры моделей инцидента, SSE-сообщений и метрик.
 
 ---
 
-### `backend/models_ai/` — Модели машинного обучения
-* `backend/models_ai/risk_assessment.onnx` — скомпилированная ONNX-модель оценки риска эскалации.
-* `backend/models_ai/risk_assessment_model.json` — веса, пороги и ключевые слова для модели риска.
-* `backend/models_ai/routing_hint.onnx` — скомпилированная ONNX-модель умной маршрутизации по командам.
-* `backend/models_ai/routing_hint_model.json` — TF-IDF словарь, веса и классы команд для роутинга.
+### `backend/models_ai/` — Модель машинного обучения
+* `backend/models_ai/time_regression.onnx` — скомпилированная ONNX-модель регрессионного прогнозирования длительности выполнения.
+* `backend/models_ai/time_regression_model.json` — веса деревьев `GradientBoostingRegressor`, метрики валидации и TF-IDF профили команд для маршрутизации.
 
 ---
 

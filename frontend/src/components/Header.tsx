@@ -1,5 +1,6 @@
 import React from 'react'
-import { Bell, BellOff, Radio, Search } from 'lucide-react'
+import { BarChart3, Bell, BellOff, Download, Radio, Search } from 'lucide-react'
+import { getExportCSVUrl } from '../services/api'
 import type { DashboardStats } from '../types/incident'
 
 interface HeaderProps {
@@ -9,6 +10,7 @@ interface HeaderProps {
   soundEnabled: boolean
   onToggleSound: () => void
   stats: DashboardStats | null
+  onOpenMLMetrics: () => void
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -18,6 +20,7 @@ export const Header: React.FC<HeaderProps> = ({
   soundEnabled,
   onToggleSound,
   stats,
+  onOpenMLMetrics,
 }) => {
   return (
     <header className="border-b border-slate-800 bg-slate-900/95 sticky top-0 z-30 px-4 py-2 flex items-center justify-between gap-3 text-xs">
@@ -90,6 +93,26 @@ export const Header: React.FC<HeaderProps> = ({
             className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-2.5 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-red-500 transition-colors"
           />
         </div>
+
+        {/* ML Metrics & Predictor modal trigger */}
+        <button
+          onClick={onOpenMLMetrics}
+          title="Метрики регрессионной модели ML и тест прогноза"
+          className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors text-[11px] font-medium"
+        >
+          <BarChart3 className="h-3.5 w-3.5 text-sky-400" />
+          <span className="hidden md:inline">Модель ML</span>
+        </button>
+
+        {/* Export CSV */}
+        <a
+          href={getExportCSVUrl()}
+          title="Выгрузить отчёт по заявкам и прогнозам (CSV)"
+          className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors text-[11px] font-medium"
+        >
+          <Download className="h-3.5 w-3.5 text-emerald-400" />
+          <span className="hidden md:inline">CSV</span>
+        </a>
 
         {/* Audio Mute toggle */}
         <button

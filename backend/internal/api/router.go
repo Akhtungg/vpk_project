@@ -44,13 +44,19 @@ func SetupRouter(db *database.DB) *chi.Mux {
 		// Stats
 		api.Get("/stats", incidentHandler.GetStats)
 
-		// Incidents CRUD
+		// Incidents CRUD & Export
 		api.Get("/incidents", incidentHandler.GetIncidents)
+		api.Get("/incidents/export", incidentHandler.ExportIncidentsCSV)
 		api.Post("/incidents", incidentHandler.CreateIncident)
 		api.Get("/incidents/{id}", incidentHandler.GetIncidentByID)
 		api.Get("/incidents/{id}/events", incidentHandler.GetIncidentEvents)
 		api.Get("/incidents/{id}/predictions", incidentHandler.GetIncidentPredictions)
 		api.Put("/incidents/{id}", incidentHandler.UpdateIncident)
+
+		// Regression Prediction & ML Quality Metrics (v1 + aliases)
+		api.Post("/v1/predict", incidentHandler.PredictTicket)
+		api.Get("/v1/metrics", incidentHandler.GetMLMetrics)
+		api.Get("/ml/metrics", incidentHandler.GetMLMetrics)
 
 		// Demo scenario helpers
 		api.Route("/demo", func(demo chi.Router) {

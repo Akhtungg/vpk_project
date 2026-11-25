@@ -5,6 +5,7 @@ import { ColumnGroup } from './components/ColumnGroup'
 import { DemoPanel } from './components/DemoPanel'
 import { Header } from './components/Header'
 import { IncidentDetailModal } from './components/IncidentDetailModal'
+import { MLMetricsModal } from './components/MLMetricsModal'
 import { getIncidents, getStats, updateIncident } from './services/api'
 import { sseService } from './services/sse'
 import type { DashboardStats, Incident, SSEMessage } from './types/incident'
@@ -17,6 +18,7 @@ export function App() {
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [connected, setConnected] = useState(false)
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null)
+  const [showMLMetrics, setShowMLMetrics] = useState(false)
   const [alerts, setAlerts] = useState<SSEMessage[]>([])
 
   const loadData = async () => {
@@ -77,19 +79,20 @@ export function App() {
     await loadData()
   }
 
-  // Filter out closed/resolved from main active monitoring by default unless matching search
+  // Filter out historical archive tickets from operational columns unless searching
   const filteredIncidents = useMemo(() => {
+    const q = search.trim().toLowerCase()
     return incidents.filter((inc) => {
-      if (search.trim()) {
-        const q = search.toLowerCase()
+      if (q) {
         return (
           inc.id.toLowerCase().includes(q) ||
           inc.header.toLowerCase().includes(q) ||
           (inc.productName && inc.productName.toLowerCase().includes(q)) ||
-          (inc.assignedGroupName && inc.assignedGroupName.toLowerCase().includes(q))
+          (inc.assignedGroupName && inc.assignedGroupName.toLowerCase().includes(q)) ||
+          (inc.assignedEmployee && inc.assignedEmployee.toLowerCase().includes(q))
         )
       }
-      return true
+      return !inc.id.startsWith('INC00002190')
     })
   }, [incidents, search])
 
@@ -126,6 +129,7 @@ export function App() {
         soundEnabled={soundEnabled}
         onToggleSound={handleToggleSound}
         stats={stats}
+        onOpenMLMetrics={() => setShowMLMetrics(true)}
       />
 
       {/* Main 4 Columns Dashboard (maximizes screen estate) */}
@@ -190,6 +194,12 @@ export function App() {
         incident={selectedIncident}
         onClose={() => setSelectedIncident(null)}
         onUpdate={handleUpdateIncident}
+      />
+
+      {/* ML Regression Metrics & API Tester Modal */}
+      <MLMetricsModal
+        open={showMLMetrics}
+        onClose={() => setShowMLMetrics(false)}
       />
 
       {/* Real-time Alerts */}

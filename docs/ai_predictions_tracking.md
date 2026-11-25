@@ -13,13 +13,14 @@ CREATE TABLE IF NOT EXISTS ai_predictions (
     id SERIAL PRIMARY KEY,
     incident_id VARCHAR(64) NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
     
-    -- Что предсказал ИИ:
+    -- Что предсказала единая регрессионная модель:
     predicted_group VARCHAR(255),
     confidence DOUBLE PRECISION,
     top_candidates JSONB,
-    predicted_risk_score DOUBLE PRECISION,
-    predicted_risk_level VARCHAR(32),
-    input_features JSONB,             -- Полный слепок полей (текст, сервис, приоритет)
+    predicted_minutes INT DEFAULT 0,
+    predicted_sla_risk DOUBLE PRECISION DEFAULT 0.0,
+    model_version VARCHAR(64) DEFAULT 'gbdt_reg_v2.0',
+    input_features JSONB,             -- Полный слепок полей (текст, сервис, приоритет, очередь)
     
     -- Что в реальности сделал координатор (обратная связь):
     actual_group VARCHAR(255),        -- Реальная выбранная команда

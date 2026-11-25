@@ -67,7 +67,8 @@ func (d *DemoHandler) CreateCritical(w http.ResponseWriter, r *http.Request) {
 	_ = d.db.RecordEvent(saved.ID, "CREATED", "Зарегистрирован критический сбой: "+saved.Header, map[string]any{
 		"priority": saved.Priority,
 		"group":    saved.AssignedGroupName,
-		"risk":     saved.AIRiskScore,
+		"sla_risk": saved.AISLARisk,
+		"est_min":  saved.AIEstimatedMinutes,
 	})
 	d.sseHub.BroadcastEvent("CRITICAL_ALERT", saved, "🚨 КРИТИЧЕСКИЙ ИНЦИДЕНТ: "+saved.Header)
 
@@ -118,10 +119,11 @@ func (d *DemoHandler) AssignToCoordinator(w http.ResponseWriter, r *http.Request
 	saved, _ := d.db.GetIncidentByID(inc.ID)
 	_ = d.db.RecordAIPrediction(saved)
 	_ = d.db.RecordEvent(saved.ID, "CREATED", "Инцидент поступил в систему", map[string]any{"group": saved.AssignedGroupName})
-	_ = d.db.RecordEvent(saved.ID, "AI_ROUTING_RECOMMENDED", "ИИ рекомендовал передать в: "+saved.AIRoutingHint, map[string]any{
+	_ = d.db.RecordEvent(saved.ID, "AI_ROUTING_RECOMMENDED", "Регрессионная модель рекомендовала передать в: "+saved.AIRoutingHint, map[string]any{
 		"recommended_group": saved.AIRoutingHint,
 		"confidence":        saved.AIRoutingConfidence,
-		"risk_score":        saved.AIRiskScore,
+		"sla_risk":          saved.AISLARisk,
+		"est_min":           saved.AIEstimatedMinutes,
 	})
 	d.sseHub.BroadcastEvent("COORDINATOR_ALERT", saved, "👤 Новый инцидент назначен на координаторов: "+saved.ID)
 

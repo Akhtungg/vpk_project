@@ -1,7 +1,6 @@
 import React from 'react'
 import {
   ArrowRight,
-  Brain,
   CheckCircle,
   Clock,
   Flame,
@@ -122,19 +121,8 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({ incident, onClick, o
         )}
       </div>
 
-      {/* Line 4: AI Insights (Only when relevant, ultra-compact) */}
-      {/* A) Risk Score badge if high risk & not already marked critical */}
-      {incident.aiRiskScore >= 50 && !isCritical && !isResolved && (
-        <div className="flex items-center justify-between mt-1.5 text-[10px] bg-red-950/30 border border-red-900/40 px-2 py-0.5 rounded text-red-300">
-          <span className="flex items-center gap-1 font-medium">
-            <Brain className="h-3 w-3 text-red-400" />
-            Риск эскалации:
-          </span>
-          <span className="font-bold font-mono text-red-200">{incident.aiRiskScore}%</span>
-        </div>
-      )}
-
-      {/* B) AI Routing Hint for Coordinator (One-click reassign action) */}
+      {/* Line 4: Unified Regression ML Insights */}
+      {/* A) Regression Routing Hint for Coordinator (One-click reassign action) */}
       {incident.aiRoutingHint && isCoordinator && !isResolved && (
         <div className="flex items-center justify-between gap-1.5 mt-1.5 bg-amber-950/40 border border-amber-800/60 p-1.5 rounded-lg text-[11px]">
           <div className="flex items-center gap-1.5 min-w-0 text-amber-200">
@@ -165,24 +153,35 @@ export const IncidentCard: React.FC<IncidentCardProps> = ({ incident, onClick, o
         </div>
       )}
 
-      {/* C) SLA Breach Risk badge (if >= 50% and not resolved) */}
-      {incident.aiSlaRisk !== undefined && incident.aiSlaRisk >= 50 && !isResolved && (
+      {/* C) Regression Estimate & SLA Breach Risk badge */}
+      {!isResolved && (incident.aiEstimatedMinutes || 0) > 0 && (
         <div className={`flex items-center justify-between mt-1.5 text-[10px] px-2 py-0.5 rounded border ${
-          incident.aiSlaRisk >= 75
+          (incident.aiSlaRisk || 0) >= 75
             ? 'bg-rose-950/40 border-rose-800/60 text-rose-300'
-            : 'bg-amber-950/30 border-amber-800/50 text-amber-300'
+            : (incident.aiSlaRisk || 0) >= 50
+            ? 'bg-amber-950/30 border-amber-800/50 text-amber-300'
+            : 'bg-slate-950/60 border-slate-800/80 text-slate-400'
         }`}>
-          <span className="flex items-center gap-1 font-medium">
-            <Clock className="h-3 w-3" />
-            Риск срыва SLA:
-          </span>
-          <div className="flex items-center gap-1.5 font-mono">
-            {incident.aiTeamWorkload !== undefined && (
-              <span className="text-[9px] text-slate-400 font-sans" title="Активных инцидентов в очереди команды">
-                очередь: {incident.aiTeamWorkload}
+          <span className="flex items-center gap-1 font-medium truncate">
+            <Clock className="h-3 w-3 flex-shrink-0" />
+            <span className="font-mono text-slate-200">
+              ~{((incident.aiEstimatedMinutes || 0) / 60).toFixed(1)}ч
+            </span>
+            {(incident.aiEstimatedMinMinutes || 0) > 0 && (incident.aiEstimatedMaxMinutes || 0) > 0 && (
+              <span className="text-[9px] text-slate-400 font-mono hidden sm:inline">
+                [{((incident.aiEstimatedMinMinutes || 0) / 60).toFixed(1)}–{((incident.aiEstimatedMaxMinutes || 0) / 60).toFixed(1)}]
               </span>
             )}
-            <span className="font-bold">{incident.aiSlaRisk}%</span>
+          </span>
+          <div className="flex items-center gap-1.5 font-mono flex-shrink-0">
+            {incident.aiTeamWorkload !== undefined && (
+              <span className="text-[9px] text-slate-400 font-sans" title="Активных инцидентов в очереди команды">
+                оч: {incident.aiTeamWorkload}
+              </span>
+            )}
+            {(incident.aiSlaRisk || 0) >= 50 && (
+              <span className="font-bold">SLA {incident.aiSlaRisk}%</span>
+            )}
           </div>
         </div>
       )}

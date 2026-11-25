@@ -1,4 +1,4 @@
-import type { DashboardStats, Incident } from '../types/incident'
+import type { DashboardStats, Incident, MLMetricsResponse, PredictRequest, PredictResponse } from '../types/incident'
 
 const API_BASE = '/api'
 
@@ -32,6 +32,29 @@ export async function getStats(): Promise<DashboardStats> {
   const res = await fetch(`${API_BASE}/stats`)
   if (!res.ok) throw new Error('Failed to fetch stats')
   return res.json()
+}
+
+export async function getMLMetrics(): Promise<MLMetricsResponse> {
+  const res = await fetch(`${API_BASE}/ml/metrics`)
+  if (!res.ok) throw new Error('Failed to fetch ML metrics')
+  return res.json()
+}
+
+export async function predictTicket(payload: PredictRequest): Promise<PredictResponse> {
+  const res = await fetch(`${API_BASE}/v1/predict`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(errText || 'Prediction failed')
+  }
+  return res.json()
+}
+
+export function getExportCSVUrl(): string {
+  return `${API_BASE}/incidents/export`
 }
 
 // Demo endpoints for live presentation
