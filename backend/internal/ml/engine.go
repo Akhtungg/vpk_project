@@ -1,6 +1,7 @@
 package ml
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -24,9 +25,10 @@ type TreeNode struct {
 }
 
 type GBDTEnsemble struct {
-	Init         float64    `json:"init"`
-	LearningRate float64    `json:"learning_rate"`
-	Trees        []TreeNode `json:"trees"`
+	Init            float64    `json:"init"`
+	LearningRate    float64    `json:"learning_rate"`
+	OutputTransform string     `json:"output_transform"`
+	Trees           []TreeNode `json:"trees"`
 }
 
 type TimeModelMetrics struct {
@@ -41,13 +43,6 @@ type TimeModelMetrics struct {
 	TotalClosedSamples int     `json:"total_closed_samples"`
 }
 
-type RoutingProfiles struct {
-	Teams     []string             `json:"teams"`
-	Vocab     map[string]int       `json:"vocab"`
-	IDF       []float64            `json:"idf"`
-	Centroids map[string][]float64 `json:"centroids"`
-}
-
 type TimeRegressionModelData struct {
 	ModelName          string             `json:"model_name"`
 	ModelVersion       string             `json:"model_version"`
@@ -59,7 +54,21 @@ type TimeRegressionModelData struct {
 	PointEnsemble      GBDTEnsemble       `json:"point_ensemble"`
 	LowerEnsemble      GBDTEnsemble       `json:"lower_ensemble"`
 	UpperEnsemble      GBDTEnsemble       `json:"upper_ensemble"`
-	RoutingProfiles    RoutingProfiles    `json:"routing_profiles"`
+}
+
+type RuEmbeddingsData struct {
+	TeacherModel     string               `json:"teacher_model"`
+	Dim              int                  `json:"dim"`
+	Vocab            map[string]int       `json:"vocab"`
+	Scales           []float64            `json:"scales"`
+	VectorsB64       string               `json:"vectors_b64"`
+	ProjWeight       [][]float64          `json:"proj_weight"`
+	ProjBias         []float64            `json:"proj_bias"`
+	ComplexityAnchor []float64            `json:"complexity_anchor"`
+	Teams            []string             `json:"teams"`
+	TeamCentroids    map[string][]float64 `json:"team_centroids"`
+
+	rawVectors []int8
 }
 
 type EmployeeCandidate struct {
@@ -71,13 +80,12 @@ type EmployeeCandidate struct {
 	SpeedRatio float64
 }
 
-// RuntimeContext holds live DB aggregations used during unified regression inference.
 type RuntimeContext struct {
 	TeamWorkloads        map[string]int
 	TeamQueueMinutes     map[string]int
 	AssigneeWorkloads    map[string]int
 	AssigneeQueueMinutes map[string]int
-	HistoryMedians       map[string]float64 // hours; keys: "gp|group|prio", "g|group", "p|product", "global"
+	HistoryMedians       map[string]float64
 	HistoryCounts        map[string]int
 	AssigneeSpeedFactors map[string]float64
 	GroupEmployees       map[string][]EmployeeCandidate
@@ -86,6 +94,7 @@ type RuntimeContext struct {
 type Engine struct {
 	mu          sync.RWMutex
 	timeModel   *TimeRegressionModelData
+	ruEmbed     *RuEmbeddingsData
 	initialized bool
 }
 
@@ -130,16 +139,30 @@ func (e *Engine) LoadModels(baseDir string) error {
 		}
 	}
 
+	if data, err := os.ReadFile(filepath.Join(modelDir, "ru_embeddings.json")); err == nil {
+		var re RuEmbeddingsData
+		if err := json.Unmarshal(data, &re); err == nil && re.VectorsB64 != "" {
+			if rawBytes, err := base64.StdEncoding.DecodeString(re.VectorsB64); err == nil {
+				vecs := make([]int8, len(rawBytes))
+				for i, b := range rawBytes {
+					vecs[i] = int8(b)
+				}
+				re.rawVectors = vecs
+				re.VectorsB64 = ""
+				e.ruEmbed = &re
+			}
+		}
+	}
+
 	return nil
 }
 
-// GetOfflineMetrics returns validation metrics and feature importances of the unified regression model.
 func (e *Engine) GetOfflineMetrics() (string, string, []string, map[string]float64, models.RegressionMetrics) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
 	if e.timeModel == nil {
-		return "unified_regression_sla_routing", "heuristic_fallback", nil, nil, models.RegressionMetrics{}
+		return "unified_regression_rubert_v3", "heuristic_fallback", nil, nil, models.RegressionMetrics{}
 	}
 	m := e.timeModel.Metrics
 	return e.timeModel.ModelName, e.timeModel.ModelVersion, e.timeModel.Features, e.timeModel.FeatureImportances, models.RegressionMetrics{
@@ -155,20 +178,23 @@ func (e *Engine) GetOfflineMetrics() (string, string, []string, map[string]float
 	}
 }
 
-// Evaluate applies the unified Regression ML model (team routing + execution time + SLA breach risk).
 func (e *Engine) Evaluate(inc *models.Incident, ctxs ...*RuntimeContext) {
 	var ctx *RuntimeContext
 	if len(ctxs) > 0 && ctxs[0] != nil {
 		ctx = ctxs[0]
 	}
 
-	e.evaluateTeamRoutingWithRegression(inc, ctx)
-	e.evaluateRegressionAndSLA(inc, ctx)
+	fullText := fmt.Sprintf("%s. %s. %s. %s. %s",
+		inc.ProductName, inc.Service, inc.ScenarioName, inc.Header, inc.Description)
+	emb := e.encodeRussianText(fullText)
+
+	e.evaluateTeamRoutingWithEmbeddings(inc, ctx, emb, fullText)
+	e.evaluateRegressionAndSLA(inc, ctx, emb)
 }
 
 func (e *Engine) hasCriticalKeyword(text string) bool {
 	lower := strings.ToLower(text)
-	keywords := []string{"авария", "массовый", "отказ", "недоступен", "падение", "критический", "срочно", "блок", "down", "error"}
+	keywords := []string{"авария", "массовый", "отказ", "недоступен", "падение", "критический", "срочно", "блок", "деградация", "обрыв", "down", "error"}
 	if e.timeModel != nil && len(e.timeModel.CriticalKeywords) > 0 {
 		keywords = e.timeModel.CriticalKeywords
 	}
@@ -196,27 +222,140 @@ func normalizePriority(inc *models.Incident) int {
 	}
 }
 
-func tokenizeWords(text string) []string {
+func splitBasicTokens(text string) []string {
 	var tokens []string
 	var cur strings.Builder
-	for _, r := range strings.ToLower(text) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
+	for _, r := range text {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			cur.WriteRune(r)
 		} else if cur.Len() > 0 {
-			w := cur.String()
-			if len([]rune(w)) >= 2 {
-				tokens = append(tokens, w)
-			}
+			tokens = append(tokens, cur.String())
 			cur.Reset()
 		}
 	}
 	if cur.Len() > 0 {
-		w := cur.String()
-		if len([]rune(w)) >= 2 {
-			tokens = append(tokens, w)
-		}
+		tokens = append(tokens, cur.String())
 	}
 	return tokens
+}
+
+func wordPieceSplitWord(word string, vocab map[string]int) ([]int, bool) {
+	runes := []rune(word)
+	n := len(runes)
+	if n == 0 || n > 64 {
+		return nil, false
+	}
+	var ids []int
+	start := 0
+	for start < n {
+		end := n
+		matched := -1
+		for end > start {
+			sub := string(runes[start:end])
+			if start > 0 {
+				sub = "##" + sub
+			}
+			if id, ok := vocab[sub]; ok {
+				matched = id
+				break
+			}
+			end--
+		}
+		if matched == -1 {
+			return nil, false
+		}
+		ids = append(ids, matched)
+		start = end
+	}
+	return ids, true
+}
+
+func (e *Engine) encodeRussianText(text string) []float64 {
+	if e.ruEmbed == nil || e.ruEmbed.Dim == 0 || len(e.ruEmbed.rawVectors) == 0 {
+		return nil
+	}
+	re := e.ruEmbed
+	dim := re.Dim
+
+	words := splitBasicTokens(text)
+	var tokenIDs []int
+	for _, w := range words {
+		if len([]rune(w)) < 2 {
+			continue
+		}
+		if ids, ok := wordPieceSplitWord(w, re.Vocab); ok {
+			tokenIDs = append(tokenIDs, ids...)
+		} else if ids, ok := wordPieceSplitWord(strings.ToLower(w), re.Vocab); ok {
+			tokenIDs = append(tokenIDs, ids...)
+		}
+	}
+
+	if len(tokenIDs) == 0 {
+		return nil
+	}
+
+	mean := make([]float64, dim)
+	validCount := 0
+	for _, tid := range tokenIDs {
+		if tid < 0 || tid >= len(re.Scales) {
+			continue
+		}
+		scale := re.Scales[tid] / 127.0
+		offset := tid * dim
+		if offset+dim > len(re.rawVectors) {
+			continue
+		}
+		for j := 0; j < dim; j++ {
+			mean[j] += float64(re.rawVectors[offset+j]) * scale
+		}
+		validCount++
+	}
+	if validCount == 0 {
+		return nil
+	}
+	invN := 1.0 / float64(validCount)
+	for j := 0; j < dim; j++ {
+		mean[j] *= invN
+	}
+
+	out := make([]float64, dim)
+	norm := 0.0
+	for i := 0; i < dim; i++ {
+		val := 0.0
+		if i < len(re.ProjBias) {
+			val = re.ProjBias[i]
+		}
+		if i < len(re.ProjWeight) {
+			row := re.ProjWeight[i]
+			for j := 0; j < dim && j < len(row); j++ {
+				val += row[j] * mean[j]
+			}
+		}
+		out[i] = val
+		norm += val * val
+	}
+	if norm > 0 {
+		norm = math.Sqrt(norm)
+		for i := range out {
+			out[i] /= norm
+		}
+	}
+	return out
+}
+
+func dotProduct(a, b []float64) float64 {
+	if len(a) == 0 || len(b) == 0 {
+		return 0.0
+	}
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	sum := 0.0
+	for i := 0; i < n; i++ {
+		sum += a[i] * b[i]
+	}
+	return sum
 }
 
 func evalTree(t TreeNode, x []float64) float64 {
@@ -248,6 +387,9 @@ func evalEnsemble(ens GBDTEnsemble, x []float64) float64 {
 	sum := ens.Init
 	for _, tree := range ens.Trees {
 		sum += ens.LearningRate * evalTree(tree, x)
+	}
+	if ens.OutputTransform == "expm1" {
+		return math.Expm1(sum)
 	}
 	return sum
 }
@@ -341,49 +483,16 @@ func computeSLARiskFromMinutes(totalExpectedMinutes, remainingMinutes float64) (
 	}
 }
 
-// evaluateTeamRoutingWithRegression uses domain TF-IDF centroids + GBDT regression SLA evaluation
-// inside the single unified model to rank the best teams.
-func (e *Engine) evaluateTeamRoutingWithRegression(inc *models.Incident, ctx *RuntimeContext) {
-	if e.timeModel == nil || len(e.timeModel.RoutingProfiles.Teams) == 0 || len(e.timeModel.RoutingProfiles.IDF) == 0 {
+func (e *Engine) evaluateTeamRoutingWithEmbeddings(inc *models.Incident, ctx *RuntimeContext, emb []float64, fullText string) {
+	if e.ruEmbed == nil || len(e.ruEmbed.Teams) == 0 || len(emb) == 0 {
 		inc.AIRoutingHint = "КЦ ИТ Координаторы Массовых Инцидентов"
 		inc.AIRoutingConfidence = 50.0
 		return
 	}
 
-	profiles := e.timeModel.RoutingProfiles
-	fullText := fmt.Sprintf("%s %s %s %s %s",
-		inc.ProductName, inc.Service, inc.ScenarioName, inc.Header, inc.Description)
-	tokens := tokenizeWords(fullText)
-
-	vec := make([]float64, len(profiles.IDF))
-	for i, w := range tokens {
-		if idx, ok := profiles.Vocab[w]; ok && idx < len(vec) {
-			vec[idx]++
-		}
-		if i+1 < len(tokens) {
-			bi := w + " " + tokens[i+1]
-			if idx, ok := profiles.Vocab[bi]; ok && idx < len(vec) {
-				vec[idx]++
-			}
-		}
-	}
-
-	norm := 0.0
-	for i := range vec {
-		if vec[i] > 0 {
-			vec[i] *= profiles.IDF[i]
-			norm += vec[i] * vec[i]
-		}
-	}
-	if norm > 0 {
-		norm = math.Sqrt(norm)
-		for i := range vec {
-			vec[i] /= norm
-		}
-	}
-
 	prio := normalizePriority(inc)
 	slaTargetHours, remainingMinutes := computeSLATargetAndRemaining(inc, prio)
+	semComplexity := dotProduct(emb, e.ruEmbed.ComplexityAnchor)
 	lowerText := strings.ToLower(fullText)
 
 	type teamEval struct {
@@ -396,26 +505,23 @@ func (e *Engine) evaluateTeamRoutingWithRegression(inc *models.Incident, ctx *Ru
 	}
 
 	var rawSims []teamEval
-	for _, team := range profiles.Teams {
-		centroid := profiles.Centroids[team]
-		dot := 0.0
-		for i, v := range vec {
-			if v > 0 && i < len(centroid) {
-				dot += v * centroid[i]
-			}
+	for _, team := range e.ruEmbed.Teams {
+		if prio >= 3 && strings.Contains(strings.ToLower(team), "autoclosed") {
+			continue
 		}
-		// Slight domain keyword boost when team name directly echoes problem terms
+		centroid := e.ruEmbed.TeamCentroids[team]
+		sim := dotProduct(emb, centroid)
+
 		teamLower := strings.ToLower(team)
-		for _, kw := range []string{"san", "vmware", "streaming", "tictok", "акваланг", "allure", "active directory", "vpn", "каталог"} {
+		for _, kw := range []string{"san", "vmware", "streaming", "mediacore", "allure", "active directory", "vpn", "foris", "simpleone", "membrana", "dc-net", "mscp", "billing", "приморье"} {
 			if strings.Contains(lowerText, kw) && strings.Contains(teamLower, kw) {
-				dot += 0.25
+				sim += 0.08
 				break
 			}
 		}
-		rawSims = append(rawSims, teamEval{group: team, sim: dot})
+		rawSims = append(rawSims, teamEval{group: team, sim: sim})
 	}
 
-	// Select top-5 domain-relevant candidates, then evaluate each with the GBDT regression model
 	sort.Slice(rawSims, func(i, j int) bool {
 		return rawSims[i].sim > rawSims[j].sim
 	})
@@ -436,20 +542,23 @@ func (e *Engine) evaluateTeamRoutingWithRegression(inc *models.Incident, ctx *Ru
 			qMin = ctx.TeamQueueMinutes[cand.group]
 		}
 		histMed, _ := lookupHistory(ctx, cand.group, inc.ProductName, prio)
-		x := e.buildRegressionFeatures(inc, cand.group, "", wl, 0, histMed, 1.0, slaTargetHours)
-		estHours := math.Max(0.25, evalEnsemble(e.timeModel.PointEnsemble, x))
-		estMin := int(math.Round(estHours * 60))
+
+		estMin := int(math.Round(histMed * 60.0))
+		if e.timeModel != nil && len(e.timeModel.PointEnsemble.Trees) > 0 {
+			x := e.buildRegressionFeatures(inc, cand.group, "", wl, 0, histMed, 1.0, slaTargetHours, semComplexity)
+			estHours := math.Max(0.25, evalEnsemble(e.timeModel.PointEnsemble, x))
+			estMin = int(math.Round(estHours * 60))
+		}
 		totalMin := float64(estMin) + float64(qMin)*0.35
 		slaRisk, _ := computeSLARiskFromMinutes(totalMin, remainingMinutes)
 
 		cand.estMinutes = estMin
 		cand.slaRisk = slaRisk
 		cand.workload = wl
-		// Unified ranking: combine domain similarity and regression SLA safety
-		cand.score = cand.sim - (slaRisk/100.0)*0.08
+		cand.score = cand.sim - (slaRisk/100.0)*0.03
 		evaluated = append(evaluated, cand)
 
-		expSum += math.Exp((cand.sim - maxSim) * 8.0)
+		expSum += math.Exp((cand.sim - maxSim) * 10.0)
 	}
 
 	sort.Slice(evaluated, func(i, j int) bool {
@@ -460,10 +569,10 @@ func (e *Engine) evaluateTeamRoutingWithRegression(inc *models.Incident, ctx *Ru
 		best := evaluated[0]
 		inc.AIRoutingHint = best.group
 
-		bestProb := (math.Exp((best.sim-maxSim)*8.0) / expSum) * 100.0
-		conf := 62.0 + bestProb*0.36
-		if best.sim > 0.35 {
-			conf += 6.0
+		bestProb := (math.Exp((best.sim-maxSim)*10.0) / expSum) * 100.0
+		conf := 60.0 + bestProb*0.35
+		if best.sim >= 0.80 {
+			conf += 8.0
 		}
 		if conf > 98.0 {
 			conf = 98.0
@@ -477,7 +586,7 @@ func (e *Engine) evaluateTeamRoutingWithRegression(inc *models.Incident, ctx *Ru
 		inc.AIRoutingTop = nil
 		for i := 0; i < topCount; i++ {
 			c := evaluated[i]
-			prob := (math.Exp((c.sim-maxSim)*8.0) / expSum) * 100.0
+			prob := (math.Exp((c.sim-maxSim)*10.0) / expSum) * 100.0
 			inc.AIRoutingTop = append(inc.AIRoutingTop, models.GroupScore{
 				Group:            c.group,
 				Confidence:       math.Round(prob*10) / 10,
@@ -498,6 +607,7 @@ func (e *Engine) buildRegressionFeatures(
 	histMedianHours float64,
 	speedFactor float64,
 	slaTargetHours float64,
+	semComplexity float64,
 ) []float64 {
 	prio := float64(normalizePriority(inc))
 	urg := float64(inc.UrgencyID)
@@ -545,6 +655,7 @@ func (e *Engine) buildRegressionFeatures(
 		isBiz,
 		titleLen,
 		hasKw,
+		semComplexity,
 	}
 }
 
@@ -560,11 +671,11 @@ func (e *Engine) computeTopFactors(x []float64, actualPredHours float64) []model
 	groups := []factorGroup{
 		{name: "История аналогичных заявок", indices: []int{6}},
 		{name: "Загрузка команды и исполнителя", indices: []int{4, 5}},
+		{name: "Семантика текста (ruBERT)", indices: []int{11, 12, 13}},
 		{name: "Приоритет и критичность", indices: []int{0, 1, 2}},
 		{name: "Скорость работы исполнителя", indices: []int{7}},
 		{name: "Регламент SLA и категория", indices: []int{3, 8}},
 		{name: "Время суток и рабочие часы", indices: []int{9, 10}},
-		{name: "Аварийные маркеры в описании", indices: []int{11, 12}},
 	}
 
 	var contribs []models.FactorContribution
@@ -593,7 +704,7 @@ func (e *Engine) computeTopFactors(x []float64, actualPredHours float64) []model
 	return contribs
 }
 
-func (e *Engine) evaluateRegressionAndSLA(inc *models.Incident, ctx *RuntimeContext) {
+func (e *Engine) evaluateRegressionAndSLA(inc *models.Incident, ctx *RuntimeContext, emb []float64) {
 	prio := normalizePriority(inc)
 
 	targetTeam := inc.AssignedGroupName
@@ -657,11 +768,15 @@ func (e *Engine) evaluateRegressionAndSLA(inc *models.Incident, ctx *RuntimeCont
 	inc.AILowConfidence = histCount < 3
 
 	slaTargetHours, remainingMinutes := computeSLATargetAndRemaining(inc, prio)
+	semComplexity := 0.0
+	if e.ruEmbed != nil && len(emb) > 0 {
+		semComplexity = dotProduct(emb, e.ruEmbed.ComplexityAnchor)
+	}
 
 	x := e.buildRegressionFeatures(
 		inc, targetTeam, assigneeKey,
 		teamWorkload, assigneeWorkload,
-		histMedianHours, speedFactor, slaTargetHours,
+		histMedianHours, speedFactor, slaTargetHours, semComplexity,
 	)
 
 	var estHours, minHours, maxHours float64
@@ -731,7 +846,7 @@ func (e *Engine) evaluateRegressionAndSLA(inc *models.Incident, ctx *RuntimeCont
 			candX := e.buildRegressionFeatures(
 				inc, targetTeam, cand.Login,
 				teamWorkload, cand.Workload,
-				histMedianHours, cand.SpeedRatio, slaTargetHours,
+				histMedianHours, cand.SpeedRatio, slaTargetHours, semComplexity,
 			)
 			candPure := math.Max(0.25, evalEnsemble(e.timeModel.PointEnsemble, candX)) * 60.0
 			candTotal := int(math.Round(candPure + float64(cand.QueueMin)*0.35))

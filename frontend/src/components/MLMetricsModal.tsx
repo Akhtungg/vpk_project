@@ -22,6 +22,7 @@ const FEATURE_LABELS: Record<string, string> = {
   is_business_hours: 'Рабочее время',
   title_length: 'Длина описания',
   has_critical_keywords: 'Критические маркеры текста',
+  semantic_complexity: 'Семантическая сложность (ruBERT)',
 }
 
 export const MLMetricsModal: React.FC<MLMetricsModalProps> = ({ open, onClose }) => {
@@ -29,10 +30,10 @@ export const MLMetricsModal: React.FC<MLMetricsModalProps> = ({ open, onClose })
   const [loading, setLoading] = useState(false)
 
   // Interactive POST /api/v1/predict tester
-  const [category, setCategory] = useState('Акваланг для муравьев')
+  const [category, setCategory] = useState('Системы хранения данных InfraCloud')
   const [groupName, setGroupName] = useState('КЦ ДОИ Администрирование SAN')
   const [priority, setPriority] = useState('High')
-  const [assigneeId, setAssigneeId] = useState('ivan_carevich')
+  const [assigneeId, setAssigneeId] = useState('ikuznetsov')
   const [slaHours, setSlaHours] = useState(4)
   const [titleText, setTitleText] = useState('Сбой репликации SAN, высокая загрузка узла')
   const [predicting, setPredicting] = useState(false)

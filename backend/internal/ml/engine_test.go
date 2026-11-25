@@ -12,11 +12,11 @@ func TestUnifiedRegressionRoutingAndSLA(t *testing.T) {
 	if err := eng.LoadModels("models_ai"); err != nil {
 		t.Fatalf("failed to load models: %v", err)
 	}
-	if eng.timeModel == nil {
-		t.Fatalf("expected unified time_regression_model.json to be loaded")
+	if eng.timeModel == nil || eng.ruEmbed == nil {
+		t.Fatalf("expected unified time_regression_model.json and ru_embeddings.json to be loaded")
 	}
-	if len(eng.timeModel.RoutingProfiles.Teams) == 0 {
-		t.Fatalf("expected team centroids inside unified regression model")
+	if len(eng.ruEmbed.Teams) == 0 {
+		t.Fatalf("expected team centroids inside ru_embeddings.json")
 	}
 
 	now := time.Now()
@@ -29,28 +29,28 @@ func TestUnifiedRegressionRoutingAndSLA(t *testing.T) {
 		Header:                "Критический отказ дискового массива SAN в кластере",
 		Description:           "Задержки ввода-вывода SAN и ошибки синхронизации лунов, требуется срочное восстановление.",
 		AssignedGroupName:     "КЦ ИТ Координаторы Массовых Инцидентов",
-		AssignedEmployee:      "Иван Царевич (ivan_carevich)",
-		AssignedEmployeeLogin: "ivan_carevich",
+		AssignedEmployee:      "Иван Кузнецов (ikuznetsov)",
+		AssignedEmployeeLogin: "ikuznetsov",
 		PriorityID:            4,
 		Priority:              "Наивысший",
 		UrgencyID:             4,
 		ImpactID:              4,
 		ServiceType:           "Технологический",
-		ProductName:           "Акваланг для муравьев",
+		ProductName:           "Системы хранения данных InfraCloud",
 	}
 
 	ctx := &RuntimeContext{
 		TeamWorkloads:        map[string]int{"КЦ ДОИ Администрирование SAN": 4},
 		TeamQueueMinutes:     map[string]int{"КЦ ДОИ Администрирование SAN": 360},
-		AssigneeWorkloads:    map[string]int{"ivan_carevich": 2},
-		AssigneeQueueMinutes: map[string]int{"ivan_carevich": 180},
+		AssigneeWorkloads:    map[string]int{"ikuznetsov": 2},
+		AssigneeQueueMinutes: map[string]int{"ikuznetsov": 180},
 		HistoryMedians:       map[string]float64{"g|КЦ ДОИ Администрирование SAN": 3.1, "global": 1.8},
 		HistoryCounts:        map[string]int{"g|КЦ ДОИ Администрирование SAN": 10, "global": 50},
-		AssigneeSpeedFactors: map[string]float64{"ivan_carevich": 1.05, "alice": 0.85},
+		AssigneeSpeedFactors: map[string]float64{"ikuznetsov": 1.05, "avolkova": 0.85},
 		GroupEmployees: map[string][]EmployeeCandidate{
 			"КЦ ДОИ Администрирование SAN": {
-				{Name: "Иван Царевич (ivan_carevich)", Login: "ivan_carevich", Workload: 2, QueueMin: 180, SpeedRatio: 1.05},
-				{Name: "Алиса в Стране Чудес (alice)", Login: "alice", Workload: 0, QueueMin: 0, SpeedRatio: 0.85},
+				{Name: "Иван Кузнецов (ikuznetsov)", Login: "ikuznetsov", Workload: 2, QueueMin: 180, SpeedRatio: 1.05},
+				{Name: "Александра Волкова (avolkova)", Login: "avolkova", Workload: 0, QueueMin: 0, SpeedRatio: 0.85},
 			},
 		},
 	}
